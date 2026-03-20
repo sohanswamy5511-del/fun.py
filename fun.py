@@ -228,8 +228,8 @@ class Board:
 
 # ---------------- GAME LOOP ---------------- #
 print("Welcome to the Slot Machine Game!")
+money = 16
 while True:
-    money = 16
     board = Board(3, 5)
     spins = input(f'You have {money} dollars. Each spin costs 1 dollar. You can spin however many times you like: ')
     sleep(1)
@@ -256,3 +256,4 @@ while True:
     print("      FINAL GRAND TOTAL")
     print("==============================")
     print(board.grand_total)
+    money+=board.grand_total
