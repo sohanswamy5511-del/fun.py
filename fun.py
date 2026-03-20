@@ -79,17 +79,21 @@ class Pattern:
         found = []
 
         for formation in self.formations:
-            max_x = max(dx for dx, _ in formation)
-            max_y = max(dy for _, dy in formation)
-
-            for start_x in range(rows - max_x):
-                for start_y in range(cols - max_y):
+            for start_x in range(rows):
+                for start_y in range(cols):
 
                     anchor_symbol = board[start_x][start_y].name
                     match = True
 
                     for dx, dy in formation:
-                        if board[start_x + dx][start_y + dy].name != anchor_symbol:
+                        x = start_x + dx
+                        y = start_y + dy
+
+                        if not (0 <= x < rows and 0 <= y < cols):
+                            match = False
+                            break
+
+                        if board[x][y].name != anchor_symbol:
                             match = False
                             break
 
@@ -115,8 +119,10 @@ class HorizontalLine(Pattern):
 class DiagonalLine(Pattern):
     def __init__(self):
         super().__init__("Diagonal Line",
-                         [[(0, 0), (1, 1), (2, 2)],
-                          [(0, 2), (1, 1), (2, 0)]],
+                         [
+                             [(0, 0), (1, 1), (2, 2)],      # main diagonal
+                             [(0, 0), (1, -1), (2, -2)]    # reverse diagonal (fixed)
+                         ],
                          1)
 
 
@@ -214,25 +220,39 @@ class Board:
 
         print(f"Total Matches: {total_matches}")
         print(f"Total Value: {total}")
-        
+
         self.grand_total += total
-        
+
         return total
 
-print("Welcome to the simulation!")
-input("Would you like to spin? (yes/no): ")
-board = Board(3, 5)
-spins = input("How many spins would you like to perform? (4 or 8): ")
-while not spins.isdigit() or (spins != "4" and spins != "8"):
-    spins = input("Invalid input. Please enter (4 or 8): ")
-spins = int(spins)
-for _ in range(spins):
-    print(f'\n--- Spin {_ + 1} ---')
-    board.current_spin()
-    board.display_total()
-    sleep(2)
 
-print("\n==============================")
-print("      FINAL GRAND TOTAL")
-print("==============================")
-print(board.grand_total)
+# ---------------- GAME LOOP ---------------- #
+print("Welcome to the Slot Machine Game!")
+while True:
+    money = 16
+    board = Board(3, 5)
+    spins = input(f'You have {money} dollars. Each spin costs 1 dollar. You can spin however many times you like: ')
+    sleep(1)
+    spins = int(spins)
+    number = int(spins)
+    sleep(2)
+    while spins == number and money < number:
+        print(f"Not enough money for {number} spins. Please enter a valid number of spins.")
+        spins = input("Enter number of spins or press q to quit: ")
+        if spins == "q":
+            break
+        while not spins.isdigit():
+            spins = input("Invalid input. Please enter a valid number of spins.")
+        spins = int(spins)
+    money = int(money)
+    money -= int(spins)
+    for i in range(spins):
+        print(f"\n--- SPIN {i+1} ---")
+        board.current_spin()
+        board.display_total()
+        sleep(2)
+
+    print("\n==============================")
+    print("      FINAL GRAND TOTAL")
+    print("==============================")
+    print(board.grand_total)
