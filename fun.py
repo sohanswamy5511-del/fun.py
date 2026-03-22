@@ -10,23 +10,8 @@ class Symbol:
 
 # ---------------- SYMBOL TYPES ---------------- #
 
-class Dice(Symbol):
-    weight = 20  # manifestation chance
-
-    def __init__(self, name='Dice', base_value=3, sidemult=None, current_value=None):
-        super().__init__(name, base_value, current_value if current_value is not None else base_value)
-        self.sidemult = sidemult
-        self.display_name = name
-
-    def roll(self):
-        self.sidemult = random.randint(1, 10)
-        self.current_value = self.base_value * self.sidemult
-        self.display_name = f"{self.name} (x{self.sidemult})"
-        return self.current_value
-
-
 class Coin(Symbol):
-    weight = 25
+    weight = 30
 
     def __init__(self, name='Coin', base_value=3, current_value=None):
         super().__init__(name, base_value, current_value if current_value is not None else base_value)
@@ -40,7 +25,7 @@ class Coin(Symbol):
 
 
 class Spinner(Symbol):
-    weight = 30
+    weight = 25
 
     def __init__(self, name='Spinner', base_value=2, current_value=None):
         super().__init__(name, base_value, current_value if current_value is not None else base_value)
@@ -53,10 +38,25 @@ class Spinner(Symbol):
         return self.current_value
 
 
+class Dice(Symbol):
+    weight = 20
+
+    def __init__(self, name='Dice', base_value=4, sidemult=None, current_value=None):
+        super().__init__(name, base_value, current_value if current_value is not None else base_value)
+        self.sidemult = sidemult
+        self.display_name = name
+
+    def roll(self):
+        self.sidemult = random.randint(1, 6)
+        self.current_value = self.base_value * self.sidemult
+        self.display_name = f"{self.name} (x{self.sidemult})"
+        return self.current_value
+
+
 class Card(Symbol):
     weight = 15
 
-    def __init__(self, name='Card', base_value=3, current_value=None):
+    def __init__(self, name='Card', base_value=2, current_value=None):
         super().__init__(name, base_value, current_value if current_value is not None else base_value)
         self.display_name = name
 
@@ -75,7 +75,7 @@ class Wheel(Symbol):
         self.display_name = name
 
     def spin(self):
-        mult = random.randint(1, 7)
+        mult = random.randint(1, 10)  # buffed max value
         self.current_value = self.base_value * mult
         self.display_name = f"{self.name} (x{mult})"
         return self.current_value
@@ -139,8 +139,8 @@ class DiagonalLine(Pattern):
     def __init__(self):
         super().__init__("Diagonal Line",
             [
-                [(0, 0), (1, 1), (2, 2)],   # main diagonal
-                [(0, 2), (1, 1), (2, 0)]    # reverse diagonal (correct)
+                [(0, 0), (1, 1), (2, 2)],
+                [(0, 2), (1, 1), (2, 0)]
             ],
             1
         )
@@ -271,7 +271,7 @@ class Board:
                 chosen.append((pattern, cells))
                 continue
 
-            if cells & used_cells:
+            if cells.issubset(used_cells):
                 continue
 
             chosen.append((pattern, cells))
@@ -280,9 +280,9 @@ class Board:
         total_matches = len(chosen)
 
         for pattern, cells in chosen:
-            cx, cy = next(iter(cells))
-            symbol_value = self.grid[cx][cy].current_value
-            total += pattern.get_multiplier(symbol_value)
+            # FIXED: SUM OF ALL SYMBOLS IN THE PATTERN
+            pattern_sum = sum(self.grid[x][y].current_value for (x, y) in cells)
+            total += pattern.get_multiplier(pattern_sum)
 
         print(f"Total Matches: {total_matches}")
         print(f"Total Value: {total}")
@@ -293,25 +293,45 @@ class Board:
 
 print("Welcome to the Slot Machine Game!")
 money = 16
+MAX_SPINS = 8
+
+def get_spin_amount(money):
+    while True:
+        spins = input(f"You have {money} dollars. Each spin costs 1 dollar.\n"
+                      f"Enter number of spins (max {MAX_SPINS}) or press q to quit: ")
+
+        if spins.lower() == "q":
+            return "q"
+
+        if not spins.isdigit():
+            print("Invalid input. Please enter a number.")
+            continue
+
+        spins = int(spins)
+
+        if spins < 1:
+            print("You must spin at least once.")
+            continue
+
+        if spins > MAX_SPINS:
+            print(f"Maximum spins is {MAX_SPINS}. Please enter a valid number.")
+            continue
+
+        if spins > money:
+            print(f"Not enough money for {spins} spins. You have {money}.")
+            continue
+
+        return spins
+
 
 while True:
     board = Board(3, 5)
-    spins = input(f'You have {money} dollars. Each spin costs 1 dollar. You can spin however many times you like: ')
-    sleep(1)
-    spins = int(spins)
-    number = int(spins)
-    sleep(2)
 
-    while spins == number and money < number:
-        print(f"Not enough money for {number} spins. Please enter a valid number of spins.")
-        spins = input("Enter number of spins or press q to quit: ")
-        if spins == "q":
-            break
-        while not spins.isdigit():
-            spins = input("Invalid input. Please enter a valid number of spins.")
-        spins = int(spins)
+    spins = get_spin_amount(money)
+    if spins == "q":
+        break
 
-    money -= int(spins)
+    money -= spins
 
     for i in range(spins):
         print(f"\n--- SPIN {i+1} ---")
