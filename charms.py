@@ -3,5 +3,5 @@ class Charm:
         self.name = name
         self.ability = ability
     def get_ability():
-        return ()
+        return
     
