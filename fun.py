@@ -19,7 +19,7 @@ class Coin(Symbol):
 
     def flip(self):
         result = random.choice(['Heads', 'Tails'])
-        self.current_value = self.base_value * (4 if result == 'Heads' else 1)
+        self.current_value = self.base_value * (5 if result == 'Heads' else 1)
         self.display_name = f"{self.name} ({result})"
         return self.current_value
 
@@ -32,7 +32,7 @@ class Spinner(Symbol):
         self.display_name = name
 
     def spin(self):
-        mult = random.randint(1, 10)
+        mult = random.randint(1, 12)
         self.current_value = self.base_value * mult
         self.display_name = f"{self.name} (x{mult})"
         return self.current_value
@@ -41,7 +41,7 @@ class Spinner(Symbol):
 class Dice(Symbol):
     weight = 20
 
-    def __init__(self, name='Dice', base_value=4, sidemult=None, current_value=None):
+    def __init__(self, name='Dice', base_value=5, sidemult=None, current_value=None):
         super().__init__(name, base_value, current_value if current_value is not None else base_value)
         self.sidemult = sidemult
         self.display_name = name
@@ -56,7 +56,7 @@ class Dice(Symbol):
 class Card(Symbol):
     weight = 15
 
-    def __init__(self, name='Card', base_value=2, current_value=None):
+    def __init__(self, name='Card', base_value=3, current_value=None):
         super().__init__(name, base_value, current_value if current_value is not None else base_value)
         self.display_name = name
 
@@ -75,7 +75,7 @@ class Wheel(Symbol):
         self.display_name = name
 
     def spin(self):
-        mult = random.randint(1, 10)  # buffed max value
+        mult = random.randint(1, 10)
         self.current_value = self.base_value * mult
         self.display_name = f"{self.name} (x{mult})"
         return self.current_value
