@@ -250,7 +250,7 @@ class Board:
         self.fill_cells(symbol_classes, weights_override)
         self.print_board()
 
-    def display_total(self):
+    def display_total(self, owned_charms):
         total = 0
         all_matches = []
 
@@ -293,7 +293,10 @@ class Board:
 
         for pattern, cells in chosen:
             pattern_sum = sum(self.grid[x][y].current_value for (x, y) in cells)
-            total += pattern.get_multiplier(pattern_sum)
+            retrigger_count = sum(1 for c in owned_charms if c.kind == "retrigger")
+            triggers = 1 + retrigger_count
+            for _ in range(triggers):
+                total += pattern.get_multiplier(pattern_sum)
 
         print(f"Total Matches: {total_matches}")
         print(f"Total Value: {total}")
@@ -326,6 +329,14 @@ Spare_Change = Charm(
     "Spare Change",
     "Gain +1 max spin per round.",
     kind="extra_spin"
+)
+
+ImBadAtMath = Charm(
+    "I'm Bad At Math",
+    "Patterns Trigger one more time",
+    kind="retrigger",
+    target=None,
+    amount=1
 )
 
 Struck_Gold = Charm(
@@ -374,14 +385,14 @@ ALL_CHARMS = [
     Trick_Deck,
     ILoveTops,
     Dice_Hard,
-    WheelOfFortune
+    WheelOfFortune,
+    ImBadAtMath
 ]
 
 
 def compute_effective_max_spins(base_max_spins, owned_charms):
     extra = sum(1 for c in owned_charms if c.kind == "extra_spin")
     return base_max_spins + extra
-
 
 def compute_weight_overrides(owned_charms):
     overrides = {}
@@ -399,7 +410,7 @@ def store_phase(money, owned_charms):
     stock = random.sample(ALL_CHARMS, stock_size)
 
     for i, charm in enumerate(stock):
-        print(f"{i}: {charm}")
+        print(f"{i+1}: {charm}")
 
     print("Enter the number of the charm to buy, or press Enter to leave the store.")
     choice = input("> ").strip()
@@ -412,7 +423,7 @@ def store_phase(money, owned_charms):
         print("Invalid choice. Leaving the store.")
         return money, owned_charms
 
-    idx = int(choice)
+    idx = int(choice)-1
     if idx < 0 or idx >= len(stock):
         print("Invalid index. Leaving the store.")
         return money, owned_charms
@@ -494,7 +505,7 @@ def main():
         for i in range(spins):
             print(f"\n--- SPIN {i + 1} ---")
             board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides)
-            board.display_total()
+            board.display_total(owned_charms)
             sleep(1)
 
         print("\n==============================")
