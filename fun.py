@@ -496,7 +496,7 @@ def get_spin_amount(money, max_spins):
             continue
 
         if spins > money:
-            print(f"Not enough money for {spins} spins. You have {money}.")
+            print(f"Not enough money for {spins} spins. You have {money} dollars.")
             continue
 
         return spins
@@ -510,7 +510,7 @@ def main():
     BASE_MAX_SPINS = 8
     owned_charms = []
 
-    while True:
+    while money > 0:
         board = Board(3, 5)
 
         effective_max_spins = compute_effective_max_spins(BASE_MAX_SPINS, owned_charms)
@@ -541,7 +541,7 @@ def main():
 
         money += board.grand_total
         print(f"You now have ${money}.\n")
-
-
+    print("You lost all your money. You lose")
+    quit()
 if __name__ == "__main__":
     main()
