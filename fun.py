@@ -1,25 +1,26 @@
 import random
 from time import sleep
 
+# ---------------- SYMBOLS ---------------- #
+
 class Symbol:
-    def __init__(self, name, base_value, current_value):
+    def __init__(self, name, base_value, current_value=None):
         self.name = name
         self.base_value = base_value
-        self.current_value = current_value
+        self.current_value = current_value if current_value is not None else base_value
+        self.display_name = name
 
-
-# ---------------- SYMBOL TYPES ---------------- #
 
 class Coin(Symbol):
     weight = 30
 
     def __init__(self, name='Coin', base_value=3, current_value=None):
-        super().__init__(name, base_value, current_value if current_value is not None else base_value)
-        self.display_name = name
+        super().__init__(name, base_value, current_value)
 
     def flip(self):
         result = random.choice(['Heads', 'Tails'])
-        self.current_value = self.base_value * (5 if result == 'Heads' else 1)
+        mult = 5 if result == 'Heads' else 1
+        self.current_value = self.base_value * mult
         self.display_name = f"{self.name} ({result})"
         return self.current_value
 
@@ -28,8 +29,7 @@ class Spinner(Symbol):
     weight = 25
 
     def __init__(self, name='Spinner', base_value=2, current_value=None):
-        super().__init__(name, base_value, current_value if current_value is not None else base_value)
-        self.display_name = name
+        super().__init__(name, base_value, current_value)
 
     def spin(self):
         mult = random.randint(1, 12)
@@ -42,9 +42,8 @@ class Dice(Symbol):
     weight = 20
 
     def __init__(self, name='Dice', base_value=5, sidemult=None, current_value=None):
-        super().__init__(name, base_value, current_value if current_value is not None else base_value)
+        super().__init__(name, base_value, current_value)
         self.sidemult = sidemult
-        self.display_name = name
 
     def roll(self):
         self.sidemult = random.randint(1, 6)
@@ -57,8 +56,7 @@ class Card(Symbol):
     weight = 15
 
     def __init__(self, name='Card', base_value=3, current_value=None):
-        super().__init__(name, base_value, current_value if current_value is not None else base_value)
-        self.display_name = name
+        super().__init__(name, base_value, current_value)
 
     def draw(self):
         value = random.randint(1, 13)
@@ -71,14 +69,16 @@ class Wheel(Symbol):
     weight = 10
 
     def __init__(self, name='Wheel', base_value=5, current_value=None):
-        super().__init__(name, base_value, current_value if current_value is not None else base_value)
-        self.display_name = name
+        super().__init__(name, base_value, current_value)
 
     def spin(self):
         mult = random.randint(1, 10)
         self.current_value = self.base_value * mult
         self.display_name = f"{self.name} (x{mult})"
         return self.current_value
+
+
+BASE_SYMBOL_CLASSES = [Dice, Coin, Spinner, Card, Wheel]
 
 
 # ---------------- PATTERNS ---------------- #
@@ -137,7 +137,8 @@ class HorizontalLine(Pattern):
 
 class DiagonalLine(Pattern):
     def __init__(self):
-        super().__init__("Diagonal Line",
+        super().__init__(
+            "Diagonal Line",
             [
                 [(0, 0), (1, 1), (2, 2)],
                 [(0, 2), (1, 1), (2, 0)]
@@ -148,21 +149,26 @@ class DiagonalLine(Pattern):
 
 class HorizontalLineLarge(Pattern):
     def __init__(self):
-        super().__init__("Horizontal Line Large",
-                         [[(0, 0), (0, 1), (0, 2), (0, 3)]],
-                         2)
+        super().__init__(
+            "Horizontal Line Large",
+            [[(0, 0), (0, 1), (0, 2), (0, 3)]],
+            2
+        )
 
 
 class HorizontalLineXL(Pattern):
     def __init__(self):
-        super().__init__("Horizontal Line XL",
-                         [[(0, 0), (0, 1), (0, 2), (0, 3), (0, 4)]],
-                         3)
+        super().__init__(
+            "Horizontal Line XL",
+            [[(0, 0), (0, 1), (0, 2), (0, 3), (0, 4)]],
+            3
+        )
 
 
 class Spoon(Pattern):
     def __init__(self):
-        super().__init__("Spoon",
+        super().__init__(
+            "Spoon",
             [
                 [(0, 0), (0, 1), (1, 0), (1, 1),
                  (2, 0), (2, 1), (3, 1), (4, 1)],
@@ -175,12 +181,24 @@ class Spoon(Pattern):
 
 class Jackpot(Pattern):
     def __init__(self):
-        super().__init__("Jackpot",
+        super().__init__(
+            "Jackpot",
             [[(0, 0), (0, 1), (0, 2), (0, 3), (0, 4),
               (1, 0), (1, 1), (1, 2), (1, 3), (1, 4),
               (2, 0), (2, 1), (2, 2), (2, 3), (2, 4)]],
             10
         )
+
+
+PATTERNS = [
+    VerticalLine(),
+    HorizontalLine(),
+    DiagonalLine(),
+    HorizontalLineLarge(),
+    HorizontalLineXL(),
+    Spoon(),
+    Jackpot()
+]
 
 
 # ---------------- BOARD ---------------- #
@@ -192,15 +210,21 @@ class Board:
         self.grid = [[None for _ in range(cols)] for _ in range(rows)]
         self.grand_total = 0
 
-    def fill_cells(self, symbols):
-        weights = [s.weight for s in symbols]
+    def fill_cells(self, symbol_classes, weights_override=None):
+        if weights_override is None:
+            weights_override = {}
+
+        weights = []
+        for cls in symbol_classes:
+            base_w = getattr(cls, "weight", 1)
+            w = weights_override.get(cls, base_w)
+            weights.append(w)
 
         for x in range(self.rows):
             for y in range(self.cols):
                 if self.grid[x][y] is None:
-
-                    symbol_class = random.choices(symbols, weights=weights, k=1)[0]
-                    symbol = symbol_class.__class__()
+                    symbol_class = random.choices(symbol_classes, weights=weights, k=1)[0]
+                    symbol = symbol_class()
 
                     if isinstance(symbol, Dice):
                         symbol.roll()
@@ -221,27 +245,16 @@ class Board:
             print(" | ".join(f"{symbol.display_name:12}" if symbol else "Empty" for symbol in row))
         print("=============\n")
 
-    def current_spin(self):
+    def current_spin(self, symbol_classes, weights_override=None):
         self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]
-        self.fill_cells([Dice(), Coin(), Spinner(), Card(), Wheel()])
+        self.fill_cells(symbol_classes, weights_override)
         self.print_board()
 
     def display_total(self):
         total = 0
-
-        patterns = [
-            VerticalLine(),
-            HorizontalLine(),
-            DiagonalLine(),
-            HorizontalLineLarge(),
-            HorizontalLineXL(),
-            Spoon(),
-            Jackpot()
-        ]
-
         all_matches = []
 
-        for pattern in patterns:
+        for pattern in PATTERNS:
             raw_matches = pattern.matches(self.grid)
 
             for (x, y, symbol_name) in raw_matches:
@@ -266,7 +279,6 @@ class Board:
         chosen = []
 
         for pattern, cells in all_matches:
-
             if pattern.name == "Jackpot":
                 chosen.append((pattern, cells))
                 continue
@@ -280,7 +292,6 @@ class Board:
         total_matches = len(chosen)
 
         for pattern, cells in chosen:
-            # FIXED: SUM OF ALL SYMBOLS IN THE PATTERN
             pattern_sum = sum(self.grid[x][y].current_value for (x, y) in cells)
             total += pattern.get_multiplier(pattern_sum)
 
@@ -291,17 +302,147 @@ class Board:
         return total
 
 
-print("Welcome to the Slot Machine Game!")
-money = 16
-MAX_SPINS = 8
+# ---------------- CHARMS & STORE ---------------- #
 
-def get_spin_amount(money):
+class Charm:
+    def __init__(self, name, description, kind, target=None, amount=0):
+        """
+        kind: 'extra_spin' or 'weight'
+        target: symbol class for weight charms
+        amount: delta to apply
+        """
+        self.name = name
+        self.description = description
+        self.kind = kind
+        self.target = target
+        self.amount = amount
+
+    def __str__(self):
+        return f"{self.name}: {self.description}"
+
+
+# Charm definitions
+Spare_Change = Charm(
+    "Spare Change",
+    "Gain +1 max spin per round.",
+    kind="extra_spin"
+)
+
+Struck_Gold = Charm(
+    "Struck Gold",
+    "Coins appear more often (+5 weight).",
+    kind="weight",
+    target=Coin,
+    amount=5
+)
+
+Trick_Deck = Charm(
+    "Trick Deck",
+    "Cards appear more often (+5 weight).",
+    kind="weight",
+    target=Card,
+    amount=5
+)
+
+ILoveTops = Charm(
+    "I Love Tops",
+    "Spinners appear more often (+5 weight).",
+    kind="weight",
+    target=Spinner,
+    amount=5
+)
+
+Dice_Hard = Charm(
+    "Dice Hard",
+    "Dice appear more often (+5 weight).",
+    kind="weight",
+    target=Dice,
+    amount=5
+)
+
+WheelOfFortune = Charm(
+    "Wheel of Fortune",
+    "Wheels appear more often (+5 weight).",
+    kind="weight",
+    target=Wheel,
+    amount=5
+)
+
+ALL_CHARMS = [
+    Spare_Change,
+    Struck_Gold,
+    Trick_Deck,
+    ILoveTops,
+    Dice_Hard,
+    WheelOfFortune
+]
+
+
+def compute_effective_max_spins(base_max_spins, owned_charms):
+    extra = sum(1 for c in owned_charms if c.kind == "extra_spin")
+    return base_max_spins + extra
+
+
+def compute_weight_overrides(owned_charms):
+    overrides = {}
+    for c in owned_charms:
+        if c.kind == "weight" and c.target is not None:
+            base = overrides.get(c.target, getattr(c.target, "weight", 1))
+            overrides[c.target] = base + c.amount
+    return overrides
+
+
+def store_phase(money, owned_charms):
+    print("\nWelcome to the store.")
+    print(f"You have ${money}. Charms cost $5 each.")
+    stock_size = min(4, len(ALL_CHARMS))
+    stock = random.sample(ALL_CHARMS, stock_size)
+
+    for i, charm in enumerate(stock):
+        print(f"{i}: {charm}")
+
+    print("Enter the number of the charm to buy, or press Enter to leave the store.")
+    choice = input("> ").strip()
+
+    if choice == "":
+        print("Leaving the store.")
+        return money, owned_charms
+
+    if not choice.isdigit():
+        print("Invalid choice. Leaving the store.")
+        return money, owned_charms
+
+    idx = int(choice)
+    if idx < 0 or idx >= len(stock):
+        print("Invalid index. Leaving the store.")
+        return money, owned_charms
+
+    if money < 5:
+        print("Not enough money to buy a charm.")
+        return money, owned_charms
+
+    chosen_charm = stock[idx]
+    owned_charms.append(chosen_charm)
+    money -= 5
+    print(f"You bought: {chosen_charm.name}")
+
+    return money, owned_charms
+
+
+# ---------------- INPUT HELPERS ---------------- #
+
+def get_spin_amount(money, max_spins):
     while True:
-        spins = input(f"You have {money} dollars. Each spin costs 1 dollar.\n"
-                      f"Enter number of spins (max {MAX_SPINS}) or press q to quit: ")
+        spins = input(
+            f"You have {money} dollars. Each spin costs 1 dollar.\n"
+            f"Enter number of spins (max {max_spins}), press q to quit, or enter store to go to the store: "
+        ).strip()
 
         if spins.lower() == "q":
             return "q"
+
+        if spins.lower() == "store":
+            return "store"
 
         if not spins.isdigit():
             print("Invalid input. Please enter a number.")
@@ -313,8 +454,8 @@ def get_spin_amount(money):
             print("You must spin at least once.")
             continue
 
-        if spins > MAX_SPINS:
-            print(f"Maximum spins is {MAX_SPINS}. Please enter a valid number.")
+        if spins > max_spins:
+            print(f"Maximum spins is {max_spins}. Please enter a valid number.")
             continue
 
         if spins > money:
@@ -324,24 +465,46 @@ def get_spin_amount(money):
         return spins
 
 
-while True:
-    board = Board(3, 5)
+# ---------------- GAME LOOP ---------------- #
 
-    spins = get_spin_amount(money)
-    if spins == "q":
-        break
+def main():
+    print("Welcome to the Slot Machine Game!")
+    money = 16
+    BASE_MAX_SPINS = 8
+    owned_charms = []
 
-    money -= spins
+    while True:
+        board = Board(3, 5)
 
-    for i in range(spins):
-        print(f"\n--- SPIN {i+1} ---")
-        board.current_spin()
-        board.display_total()
-        sleep(1)
+        effective_max_spins = compute_effective_max_spins(BASE_MAX_SPINS, owned_charms)
+        spins = get_spin_amount(money, effective_max_spins)
 
-    print("\n==============================")
-    print("      FINAL GRAND TOTAL")
-    print("==============================")
-    print(board.grand_total)
+        if spins == "q":
+            print("Thanks for playing!")
+            break
 
-    money += board.grand_total
+        if spins == "store":
+            money, owned_charms = store_phase(money, owned_charms)
+            continue
+
+        money -= spins
+
+        weight_overrides = compute_weight_overrides(owned_charms)
+
+        for i in range(spins):
+            print(f"\n--- SPIN {i + 1} ---")
+            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides)
+            board.display_total()
+            sleep(1)
+
+        print("\n==============================")
+        print("      FINAL GRAND TOTAL")
+        print("==============================")
+        print(board.grand_total)
+
+        money += board.grand_total
+        print(f"You now have ${money}.\n")
+
+
+if __name__ == "__main__":
+    main()
