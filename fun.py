@@ -275,7 +275,6 @@ class Board:
 
         all_matches.sort(key=sort_key)
 
-        used_cells = set()
         chosen = []
 
         for pattern, cells in all_matches:
@@ -283,27 +282,52 @@ class Board:
                 chosen.append((pattern, cells))
                 continue
 
-            if cells.issubset(used_cells):
+            fully_covered_by_single = any(
+                cells.issubset(existing_cells)
+                for _, existing_cells in chosen
+            )
+            if fully_covered_by_single:
                 continue
 
             chosen.append((pattern, cells))
-            used_cells |= cells
 
-        total_matches = len(chosen)
-
+        retrigger_count = sum(1 for c in owned_charms if c.kind == "retrigger")
+        triggers = 1 + retrigger_count
+        sleep(1)
+        print("\n=== PATTERN BREAKDOWN ===")
         for pattern, cells in chosen:
-            pattern_sum = sum(self.grid[x][y].current_value for (x, y) in cells)
-            retrigger_count = sum(1 for c in owned_charms if c.kind == "retrigger")
-            triggers = 1 + retrigger_count
-            for _ in range(triggers):
-                total += pattern.get_multiplier(pattern_sum)
+            symbol_values = [self.grid[x][y].current_value for (x, y) in cells]
+            pattern_sum = sum(symbol_values)
+            pattern_score = pattern.get_multiplier(pattern_sum)
 
-        print(f"Total Matches: {total_matches}")
-        print(f"Total Value: {total}")
+            print(f"\nPattern: {pattern.name}")
+            print(f"Cells: {sorted(list(cells))}")
+            print("Symbols:")
+            for (x, y) in sorted(list(cells)):
+                s = self.grid[x][y]
+                print(f"  ({x},{y}) -> {s.display_name} = {s.current_value}")
+
+            print(f"Base Sum: {pattern_sum}")
+            print(f"Multiplier: x{pattern.current_multiplier_value}")
+            print(f"Triggers: {triggers}")
+            print(f"Contribution: {pattern_score * triggers}")
+
+            total += pattern_score * triggers
+
+        print("\n=========================")
+        print(f"Total Matches: {len(chosen)}")
+        if all_matches != []:
+            if retrigger_count > 0 and retrigger_count != 1:
+                print(f"All patterns matched {retrigger_count} more times!")
+            elif retrigger_count == 1:
+                print(f'All patterns matched {retrigger_count} more time!')
+            else:
+                return None
+        print(f"Total Value: {total}") 
+        print("=========================\n")
 
         self.grand_total += total
         return total
-
 
 # ---------------- CHARMS & STORE ---------------- #
 
@@ -378,6 +402,8 @@ WheelOfFortune = Charm(
     target=Wheel,
     amount=5
 )
+
+#more charms coming soon
 
 ALL_CHARMS = [
     Spare_Change,
