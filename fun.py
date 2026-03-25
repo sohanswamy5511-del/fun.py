@@ -232,7 +232,7 @@ def spoon_matches_override(self, board):
     cols = len(board[0])
     found = []
 
-    # Spoon A (relative)
+    # Spoon A (relative, index 0)
     formationA = self.formations[0]
     for start_x in range(rows):
         for start_y in range(cols):
@@ -248,9 +248,9 @@ def spoon_matches_override(self, board):
                     match = False
                     break
             if match:
-                found.append((start_x, start_y, anchor_symbol))
+                found.append((start_x, start_y, anchor_symbol, 0))
 
-    # Spoon B (absolute)
+    # Spoon B (absolute, index 1)
     formationB = self.formations[1]
     anchor_symbol = board[formationB[0][0]][formationB[0][1]].name
     match = True
@@ -262,7 +262,8 @@ def spoon_matches_override(self, board):
             match = False
             break
     if match:
-        found.append((0, 0, anchor_symbol))
+        # x,y are irrelevant for absolute; keep dummy
+        found.append((0, 0, anchor_symbol, 1))
 
     return found
 
@@ -337,15 +338,24 @@ class Board:
         for pattern in PATTERNS:
             raw_matches = pattern.matches(self.grid)
 
-            for (x, y, symbol_name) in raw_matches:
-                for formation in pattern.formations:
-                    cells = {(x + dx, y + dy) for (dx, dy) in formation} if pattern != SPOON else {
-                        (fx, fy) for (fx, fy) in formation
-                    }
+            for match in raw_matches:
+                if pattern is SPOON:
+                    x, y, symbol_name, formation_index = match
+                    formation = pattern.formations[formation_index]
+                    cells = {(fx, fy) for (fx, fy) in formation}
+                else:
+                    x, y, symbol_name = match
+                    cells = None
+                    for formation in pattern.formations:
+                        candidate = {(x + dx, y + dy) for (dx, dy) in formation}
+                        if all(0 <= cx < self.rows and 0 <= cy < self.cols for (cx, cy) in candidate):
+                            cells = candidate
+                            break
+                    if cells is None:
+                        continue
 
-                    if all(0 <= cx < self.rows and 0 <= cy < self.cols for (cx, cy) in cells):
-                        all_matches.append((pattern, cells))
-                        break
+                if all(0 <= cx < self.rows and 0 <= cy < self.cols for (cx, cy) in cells):
+                    all_matches.append((pattern, cells))
 
         def sort_key(item):
             pattern, cells = item
@@ -541,7 +551,7 @@ def store_phase(money, owned_charms):
 
     chosen_charm = stock[idx]
     owned_charms.append(chosen_charm)
-    
+
     money -= 5
     print(f"You bought: {chosen_charm.name}")
 
