@@ -84,13 +84,14 @@ BASE_SYMBOL_CLASSES = [Dice, Coin, Spinner, Card, Wheel]
 # ---------------- PATTERNS ---------------- #
 
 class Pattern:
-    def __init__(self, name, formations, base_multiplier_value, current_multiplier_value=None):
+    def __init__(self, name, formations, base_multiplier_value, current_multiplier_value=None, absolute=False):
         self.name = name
         self.formations = formations
         self.base_multiplier_value = base_multiplier_value
         self.current_multiplier_value = (
             current_multiplier_value if current_multiplier_value is not None else base_multiplier_value
         )
+        self.absolute = absolute
 
     def matches(self, board):
         rows = len(board)
@@ -98,6 +99,25 @@ class Pattern:
         found = []
 
         for formation in self.formations:
+
+            if self.absolute:
+                # Absolute coordinate matching
+                anchor_symbol = board[formation[0][0]][formation[0][1]].name
+                match = True
+
+                for (x, y) in formation:
+                    if not (0 <= x < rows and 0 <= y < cols):
+                        match = False
+                        break
+                    if board[x][y].name != anchor_symbol:
+                        match = False
+                        break
+
+                if match:
+                    found.append((0, 0, anchor_symbol))  # anchor irrelevant for absolute
+                continue
+
+            # Relative sliding logic (normal patterns)
             for start_x in range(rows):
                 for start_y in range(cols):
 
@@ -170,10 +190,16 @@ class Spoon(Pattern):
         super().__init__(
             "Spoon",
             [
-                [(0, 0), (0, 1), (1, 0), (1, 1),
-                 (0, 2), (1, 2), (2, 1), (3, 1), (4, 1)],
-                [(0, 1), (1, 1), (2, 1), (3, 2),
-                 (4, 2), (4, 1), (3, 1), (3, 0), (4, 0)]
+                # Spoon A (relative)
+                [(0, 0), (1, 0), (2, 0),
+                 (0, 1), (1, 1), (2, 1),
+                 (1, 2), (1, 3), (1, 4)],
+
+                # Spoon B (absolute)
+                [(1, 0), (1, 1), (1, 2),
+                 (1, 3), (1, 4),
+                 (2, 3), (2, 4),
+                 (0, 3), (0, 4)]
             ],
             5
         )
@@ -190,13 +216,67 @@ class Jackpot(Pattern):
         )
 
 
+# Mark Spoon B as absolute
+SPOON = Spoon()
+SPOON.formations = [
+    SPOON.formations[0],  # Spoon A stays relative
+    SPOON.formations[1]   # Spoon B absolute
+]
+SPOON.absolute = False  # default for Spoon A
+# But we need to mark Spoon B specifically:
+SPOON_ABSOLUTE_INDEX = 1
+
+
+def spoon_matches_override(self, board):
+    rows = len(board)
+    cols = len(board[0])
+    found = []
+
+    # Spoon A (relative)
+    formationA = self.formations[0]
+    for start_x in range(rows):
+        for start_y in range(cols):
+            anchor_symbol = board[start_x][start_y].name
+            match = True
+            for dx, dy in formationA:
+                x = start_x + dx
+                y = start_y + dy
+                if not (0 <= x < rows and 0 <= y < cols):
+                    match = False
+                    break
+                if board[x][y].name != anchor_symbol:
+                    match = False
+                    break
+            if match:
+                found.append((start_x, start_y, anchor_symbol))
+
+    # Spoon B (absolute)
+    formationB = self.formations[1]
+    anchor_symbol = board[formationB[0][0]][formationB[0][1]].name
+    match = True
+    for (x, y) in formationB:
+        if not (0 <= x < rows and 0 <= y < cols):
+            match = False
+            break
+        if board[x][y].name != anchor_symbol:
+            match = False
+            break
+    if match:
+        found.append((0, 0, anchor_symbol))
+
+    return found
+
+
+SPOON.matches = spoon_matches_override.__get__(SPOON, Pattern)
+
+
 PATTERNS = [
     VerticalLine(),
     HorizontalLine(),
     DiagonalLine(),
     HorizontalLineLarge(),
     HorizontalLineXL(),
-    Spoon(),
+    SPOON,
     Jackpot()
 ]
 
@@ -259,13 +339,14 @@ class Board:
 
             for (x, y, symbol_name) in raw_matches:
                 for formation in pattern.formations:
-                    cells = {(x + dx, y + dy) for (dx, dy) in formation}
+                    cells = {(x + dx, y + dy) for (dx, dy) in formation} if pattern != SPOON else {
+                        (fx, fy) for (fx, fy) in formation
+                    }
 
                     if all(0 <= cx < self.rows and 0 <= cy < self.cols for (cx, cy) in cells):
                         all_matches.append((pattern, cells))
                         break
 
-        # You can keep sort_key as a no-op or define a real one; for now it does nothing
         def sort_key(item):
             pattern, cells = item
             return -len(cells)
@@ -277,13 +358,11 @@ class Board:
 
         for pattern, cells in all_matches:
 
-            # Jackpot: always allowed, does not block anything
             if pattern.name == "Jackpot":
                 chosen.append((pattern, cells))
                 used_cells |= cells
                 continue
 
-            # Block only if fully inside a non-Jackpot pattern
             fully_inside = any(
                 cells.issubset(existing_cells)
                 for (p, existing_cells) in chosen
@@ -337,15 +416,11 @@ class Board:
         self.grand_total += total
         return total
 
+
 # ---------------- CHARMS & STORE ---------------- #
 
 class Charm:
     def __init__(self, name, description, kind, target=None, amount=0):
-        """
-        kind: 'extra_spin' or 'weight'
-        target: symbol class for weight charms
-        amount: delta to apply
-        """
         self.name = name
         self.description = description
         self.kind = kind
@@ -356,7 +431,6 @@ class Charm:
         return f"{self.name}: {self.description}"
 
 
-# Charm definitions
 Spare_Change = Charm(
     "Spare Change",
     "Gain +1 max spin per round.",
@@ -411,8 +485,6 @@ WheelOfFortune = Charm(
     amount=5
 )
 
-#more charms coming soon
-
 ALL_CHARMS = [
     Spare_Change,
     Struck_Gold,
@@ -427,6 +499,7 @@ ALL_CHARMS = [
 def compute_effective_max_spins(base_max_spins, owned_charms):
     extra = sum(1 for c in owned_charms if c.kind == "extra_spin")
     return base_max_spins + extra
+
 
 def compute_weight_overrides(owned_charms):
     overrides = {}
@@ -468,15 +541,7 @@ def store_phase(money, owned_charms):
 
     chosen_charm = stock[idx]
     owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
-    owned_charms.append(chosen_charm)
+    
     money -= 5
     print(f"You bought: {chosen_charm.name}")
 
@@ -517,7 +582,6 @@ def get_spin_amount(money, max_spins):
             continue
 
         return spins
-
 
 # ---------------- GAME LOOP ---------------- #
 
