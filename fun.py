@@ -267,30 +267,25 @@ class Board:
 
         def sort_key(item):
             pattern, cells = item
-            is_jackpot = (pattern.name == "Jackpot")
-            return (
-                0 if is_jackpot else 1,
-                -len(cells)
-            )
 
         all_matches.sort(key=sort_key)
 
         chosen = []
-
+        used_cells = set()
         for pattern, cells in all_matches:
+            
             if pattern.name == "Jackpot":
-                chosen.append((pattern, cells))
+                chosen.append(pattern, cells)
                 continue
 
-            fully_covered_by_single = any(
-                cells.issubset(existing_cells)
-                for _, existing_cells in chosen
-            )
-            if fully_covered_by_single:
-                continue
+            if any(cells.issubset(existing_cells)
+                    for (p, existing_cells) in chosen
+                    if p.name != "Jackpot"):
+                        continue
 
             chosen.append((pattern, cells))
-
+            used_cells |= cells
+            
         retrigger_count = sum(1 for c in owned_charms if c.kind == "retrigger")
         triggers = 1 + retrigger_count
         sleep(1)
@@ -317,6 +312,8 @@ class Board:
         print("\n=========================")
         print(f"Total Matches: {len(chosen)}")
         if all_matches != []:
+            if Jackpot == True:
+                print("Jackpot!!!")
             if retrigger_count > 0 and retrigger_count != 1:
                 print(f"All patterns matched {retrigger_count} more times!")
             elif retrigger_count == 1:
