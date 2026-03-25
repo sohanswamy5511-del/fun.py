@@ -171,7 +171,7 @@ class Spoon(Pattern):
             "Spoon",
             [
                 [(0, 0), (0, 1), (1, 0), (1, 1),
-                 (2, 0), (2, 1), (3, 1), (4, 1)],
+                 (0, 2), (1, 2), (2, 1), (3, 1), (4, 1)],
                 [(0, 1), (1, 1), (2, 1), (3, 2),
                  (4, 2), (4, 1), (3, 1), (3, 0), (4, 0)]
             ],
@@ -265,29 +265,37 @@ class Board:
                         all_matches.append((pattern, cells))
                         break
 
+        # You can keep sort_key as a no-op or define a real one; for now it does nothing
         def sort_key(item):
             pattern, cells = item
+            return 0
 
         all_matches.sort(key=sort_key)
 
         chosen = []
         used_cells = set()
+
         for pattern, cells in all_matches:
-            
+
+            # Jackpot: always allowed, does not block anything
             if pattern.name == "Jackpot":
-                chosen.append(pattern, cells)
+                chosen.append((pattern, cells))
                 continue
 
-            if any(cells.issubset(existing_cells)
-                    for (p, existing_cells) in chosen
-                    if p.name != "Jackpot"):
-                        continue
+            # Block only if fully inside a non-Jackpot pattern
+            if any(
+                cells.issubset(existing_cells)
+                for (p, existing_cells) in chosen
+                if p.name != "Jackpot"
+            ):
+                continue
 
             chosen.append((pattern, cells))
             used_cells |= cells
-            
+
         retrigger_count = sum(1 for c in owned_charms if c.kind == "retrigger")
         triggers = 1 + retrigger_count
+
         sleep(1)
         print("\n=== PATTERN BREAKDOWN ===")
         for pattern, cells in chosen:
@@ -311,16 +319,16 @@ class Board:
 
         print("\n=========================")
         print(f"Total Matches: {len(chosen)}")
-        if all_matches != []:
-            if Jackpot == True:
+
+        if all_matches:
+            has_jackpot = any(p.name == "Jackpot" for (p, _) in chosen)
+            if has_jackpot:
                 print("Jackpot!!!")
-            if retrigger_count > 0 and retrigger_count != 1:
-                print(f"All patterns matched {retrigger_count} more times!")
-            elif retrigger_count == 1:
-                print(f'All patterns matched {retrigger_count} more time!')
-            else:
-                return None
-        print(f"Total Value: {total}") 
+            if retrigger_count > 0:
+                plural = "times" if retrigger_count > 1 else "time"
+                print(f"All patterns matched {retrigger_count} more {plural}!")
+
+        print(f"Total Value: {total}")
         print("=========================\n")
 
         self.grand_total += total
