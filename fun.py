@@ -268,7 +268,7 @@ class Board:
         # You can keep sort_key as a no-op or define a real one; for now it does nothing
         def sort_key(item):
             pattern, cells = item
-            return 0
+            return -len(cells)
 
         all_matches.sort(key=sort_key)
 
@@ -280,14 +280,17 @@ class Board:
             # Jackpot: always allowed, does not block anything
             if pattern.name == "Jackpot":
                 chosen.append((pattern, cells))
+                used_cells |= cells
                 continue
 
             # Block only if fully inside a non-Jackpot pattern
-            if any(
+            fully_inside = any(
                 cells.issubset(existing_cells)
                 for (p, existing_cells) in chosen
                 if p.name != "Jackpot"
-            ):
+            )
+
+            if fully_inside:
                 continue
 
             chosen.append((pattern, cells))
@@ -464,6 +467,15 @@ def store_phase(money, owned_charms):
         return money, owned_charms
 
     chosen_charm = stock[idx]
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
     owned_charms.append(chosen_charm)
     money -= 5
     print(f"You bought: {chosen_charm.name}")
