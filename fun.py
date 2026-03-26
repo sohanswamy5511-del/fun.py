@@ -3,12 +3,14 @@ from time import sleep
 
 # ---------------- SYMBOLS ---------------- #
 
+
 class Symbol:
     def __init__(self, name, base_value, current_value=None):
         self.name = name
         self.base_value = base_value
         self.current_value = current_value if current_value is not None else base_value
         self.display_name = name
+        self.is_golden = False
 
 
 class Coin(Symbol):
@@ -20,7 +22,11 @@ class Coin(Symbol):
     def flip(self):
         result = random.choice(['Heads', 'Tails'])
         mult = 5 if result == 'Heads' else 1
-        self.current_value = self.base_value * mult
+        # If current_value is None, start from base_value
+        if self.current_value is None:
+            self.current_value = self.base_value * mult
+        else:
+            self.current_value = self.current_value * mult
         self.display_name = f"{self.name} ({result})"
         return self.current_value
 
@@ -82,6 +88,7 @@ BASE_SYMBOL_CLASSES = [Dice, Coin, Spinner, Card, Wheel]
 
 
 # ---------------- PATTERNS ---------------- #
+
 
 class Pattern:
     def __init__(self, name, formations, base_multiplier_value, current_multiplier_value=None, absolute=False):
@@ -223,7 +230,6 @@ SPOON.formations = [
     SPOON.formations[1]   # Spoon B absolute
 ]
 SPOON.absolute = False  # default for Spoon A
-# But we need to mark Spoon B specifically:
 SPOON_ABSOLUTE_INDEX = 1
 
 
@@ -262,7 +268,6 @@ def spoon_matches_override(self, board):
             match = False
             break
     if match:
-        # x,y are irrelevant for absolute; keep dummy
         found.append((0, 0, anchor_symbol, 1))
 
     return found
@@ -284,6 +289,7 @@ PATTERNS = [
 
 # ---------------- BOARD ---------------- #
 
+
 class Board:
     def __init__(self, rows, cols):
         self.rows = rows
@@ -291,9 +297,23 @@ class Board:
         self.grid = [[None for _ in range(cols)] for _ in range(rows)]
         self.grand_total = 0
 
-    def fill_cells(self, symbol_classes, weights_override=None):
+        # Global permanent bonuses per symbol type
+        self.global_symbol_bonuses = {}      # {class: int}
+        # Bonuses that will be applied next spin (delayed)
+        self.pending_global_bonuses = {}     # {class: int}
+
+    def _apply_pending_bonuses(self):
+        for symbol_type, inc in self.pending_global_bonuses.items():
+            self.global_symbol_bonuses[symbol_type] = (
+                self.global_symbol_bonuses.get(symbol_type, 0) + inc
+            )
+        self.pending_global_bonuses.clear()
+
+    def fill_cells(self, symbol_classes, weights_override=None, owned_charms=None):
         if weights_override is None:
             weights_override = {}
+        if owned_charms is None:
+            owned_charms = []
 
         weights = []
         for cls in symbol_classes:
@@ -301,12 +321,23 @@ class Board:
             w = weights_override.get(cls, base_w)
             weights.append(w)
 
+        has_golden_coins_charm = any(
+            c.kind == "modifier" and c.target is Coin for c in owned_charms
+        )
+        has_rigged_dice_charm = any(
+            c.kind == "modifier" and c.target is Dice for c in owned_charms
+        )
+
         for x in range(self.rows):
             for y in range(self.cols):
                 if self.grid[x][y] is None:
                     symbol_class = random.choices(symbol_classes, weights=weights, k=1)[0]
                     symbol = symbol_class()
+                    
+                    bonus = self.global_symbol_bonuses.get(type(symbol), 0)
+                    symbol.current_value += bonus
 
+                    # Roll / spin / draw
                     if isinstance(symbol, Dice):
                         symbol.roll()
                     elif isinstance(symbol, Coin):
@@ -318,6 +349,15 @@ class Board:
                     elif isinstance(symbol, Wheel):
                         symbol.spin()
 
+                    if has_golden_coins_charm and isinstance(symbol, Coin):
+                        if random.randint(1, 100) <= 100:
+                            symbol.is_golden = True
+                            symbol.display_name += " [GOLD]"
+                    if has_rigged_dice_charm and isinstance(symbol, Dice):
+                        if random.randint(1, 100) <= 100:
+                            symbol.is_golden = True
+                            symbol.display_name += " [GOLD]"
+
                     self.grid[x][y] = symbol
 
     def print_board(self):
@@ -326,9 +366,12 @@ class Board:
             print(" | ".join(f"{symbol.display_name:12}" if symbol else "Empty" for symbol in row))
         print("=============\n")
 
-    def current_spin(self, symbol_classes, weights_override=None):
+    def current_spin(self, symbol_classes, weights_override=None, owned_charms=None):
+        self._apply_pending_bonuses()
+
+        # New spin, new grid
         self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]
-        self.fill_cells(symbol_classes, weights_override)
+        self.fill_cells(symbol_classes, weights_override, owned_charms)
         self.print_board()
 
     def display_total(self, owned_charms):
@@ -388,9 +431,18 @@ class Board:
         retrigger_count = sum(1 for c in owned_charms if c.kind == "retrigger")
         triggers = 1 + retrigger_count
 
+        has_golden_coins_charm = any(
+            c.kind == "modifier" and c.target is Coin for c in owned_charms
+        )
+        
+        has_rigged_dice_charm = any(
+            c.kind == "modifier" and c.target is Dice for c in owned_charms
+        )
+
         sleep(1)
         print("\n=== PATTERN BREAKDOWN ===")
         for pattern, cells in chosen:
+            # Compute pattern sum using current_value (already includes permanent bonuses)
             symbol_values = [self.grid[x][y].current_value for (x, y) in cells]
             pattern_sum = sum(symbol_values)
             pattern_score = pattern.get_multiplier(pattern_sum)
@@ -408,6 +460,33 @@ class Board:
             print(f"Contribution: {pattern_score * triggers}")
 
             total += pattern_score * triggers
+
+            if has_golden_coins_charm:
+                symbols_in_pattern = [self.grid[x][y] for (x, y) in cells]
+                if all(isinstance(s, Coin) for s in symbols_in_pattern):
+                    golden_count = sum(1 for s in symbols_in_pattern if s.is_golden)
+                    if golden_count > 0:
+                        increase = 3 * golden_count  # always +3 per golden symbol
+                        self.pending_global_bonuses[Coin] = (
+                            self.pending_global_bonuses.get(Coin, 0) + increase
+                        )
+                        print(
+                            f"GoldenCoins activated! All Coins will gain +{increase} "
+                            f"starting next spin."
+                        )
+            if has_rigged_dice_charm:
+                symbols_in_pattern = [self.grid[x][y] for (x, y) in cells]
+                if all(isinstance(s, Dice) for s in symbols_in_pattern):
+                    golden_count = sum(1 for s in symbols_in_pattern if s.is_golden)
+                    if golden_count > 0:
+                        increase = 5 * golden_count
+                        self.pending_global_bonuses[Dice] = (
+                            self.pending_global_bonuses.get(Dice, 0) + increase
+                        )
+                        print(
+                            f"Rigged_Dice activated! All Dice will gain +{increase} "
+                            f"starting next spin."
+                        )
 
         print("\n=========================")
         print(f"Total Matches: {len(chosen)}")
@@ -429,10 +508,12 @@ class Board:
 
 # ---------------- CHARMS & STORE ---------------- #
 
+
 class Charm:
-    def __init__(self, name, description, kind, target=None, amount=0):
+    def __init__(self, name, description, kind, modifier_description=None, target=None, amount=0):
         self.name = name
         self.description = description
+        self.modifier_description = modifier_description
         self.kind = kind
         self.target = target
         self.amount = amount
@@ -495,6 +576,24 @@ WheelOfFortune = Charm(
     amount=5
 )
 
+GoldenCoins = Charm(
+    "Golden Coins",
+    "20% chance for coins to have the gold modifier.",
+    kind="modifier",
+    modifier_description="Golden modifier: scoring a symbol with this modifier increases the symbol by its base value.",
+    target=Coin,
+    amount=20
+)
+
+Rigged_Dice = Charm(
+    "Rigged Dice",
+    "30% chance for Dice to have the gold modifier.",
+    kind="modifier",
+    modifier_description="Golden modifier: scoring a symbol with this modifier increases the symbol by its base value.",
+    target=Dice,
+    amount=30
+)
+
 ALL_CHARMS = [
     Spare_Change,
     Struck_Gold,
@@ -502,7 +601,9 @@ ALL_CHARMS = [
     ILoveTops,
     Dice_Hard,
     WheelOfFortune,
-    ImBadAtMath
+    ImBadAtMath,
+    GoldenCoins,
+    Rigged_Dice
 ]
 
 
@@ -523,8 +624,13 @@ def compute_weight_overrides(owned_charms):
 def store_phase(money, owned_charms):
     print("\nWelcome to the store.")
     print(f"You have ${money}. Charms cost $5 each.")
-    stock_size = min(4, len(ALL_CHARMS))
-    stock = random.sample(ALL_CHARMS, stock_size)
+    available_charms = [c for c in ALL_CHARMS if c not in owned_charms]
+    if not available_charms:
+        print("No more charms available.")
+        return money, owned_charms
+
+    stock_size = min(4, len(available_charms))
+    stock = random.sample(available_charms, stock_size)
 
     for i, charm in enumerate(stock):
         print(f"{i+1}: {charm}")
@@ -540,7 +646,7 @@ def store_phase(money, owned_charms):
         print("Invalid choice. Leaving the store.")
         return money, owned_charms
 
-    idx = int(choice)-1
+    idx = int(choice) - 1
     if idx < 0 or idx >= len(stock):
         print("Invalid index. Leaving the store.")
         return money, owned_charms
@@ -551,14 +657,113 @@ def store_phase(money, owned_charms):
 
     chosen_charm = stock[idx]
     owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
+    owned_charms.append(chosen_charm)
 
     money -= 5
     print(f"You bought: {chosen_charm.name}")
-
     return money, owned_charms
 
 
 # ---------------- INPUT HELPERS ---------------- #
+
 
 def get_spin_amount(money, max_spins):
     while True:
@@ -593,7 +798,9 @@ def get_spin_amount(money, max_spins):
 
         return spins
 
+
 # ---------------- GAME LOOP ---------------- #
+
 
 def main():
     print("Welcome to the Slot Machine Game!")
@@ -621,7 +828,7 @@ def main():
 
         for i in range(spins):
             print(f"\n--- SPIN {i + 1} ---")
-            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides)
+            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms)
             board.display_total(owned_charms)
             sleep(1)
 
@@ -632,7 +839,10 @@ def main():
 
         money += board.grand_total
         print(f"You now have ${money}.\n")
-    print("You lost all your money. You lose")
-    quit()
+    if money == 0:
+        print("You lost all your money. You lose")
+        quit()
+
+
 if __name__ == "__main__":
     main()
