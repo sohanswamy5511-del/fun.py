@@ -439,7 +439,6 @@ class Board:
             c.kind == "modifier" and c.target is Dice for c in owned_charms
         )
 
-        sleep(1)
         print("\n=== PATTERN BREAKDOWN ===")
         for pattern, cells in chosen:
             # Compute pattern sum using current_value (already includes permanent bonuses)
@@ -464,9 +463,9 @@ class Board:
             if has_golden_coins_charm:
                 symbols_in_pattern = [self.grid[x][y] for (x, y) in cells]
                 if all(isinstance(s, Coin) for s in symbols_in_pattern):
-                    golden_count = sum(1 for s in symbols_in_pattern if s.is_golden)
-                    if golden_count > 0:
-                        increase = 3 * golden_count  # always +3 per golden symbol
+                    self.global_golden_count = sum(1 for s in symbols_in_pattern if s.is_golden)
+                    if self.global_golden_count > 0:
+                        increase = 3 * self.global_golden_count  # always +3 per golden symbol
                         self.pending_global_bonuses[Coin] = (
                             self.pending_global_bonuses.get(Coin, 0) + increase
                         )
@@ -474,12 +473,15 @@ class Board:
                             f"GoldenCoins activated! All Coins will gain +{increase} "
                             f"starting next spin."
                         )
+                        def gold_total():
+                            gold_total = 0
+                            gold_total + int(increase)
             if has_rigged_dice_charm:
                 symbols_in_pattern = [self.grid[x][y] for (x, y) in cells]
                 if all(isinstance(s, Dice) for s in symbols_in_pattern):
-                    golden_count = sum(1 for s in symbols_in_pattern if s.is_golden)
-                    if golden_count > 0:
-                        increase = 5 * golden_count
+                    self.global_golden_count = sum(1 for s in symbols_in_pattern if s.is_golden)
+                    if self.global_golden_count > 0:
+                        increase = 5 * self.global_golden_count
                         self.pending_global_bonuses[Dice] = (
                             self.pending_global_bonuses.get(Dice, 0) + increase
                         )
@@ -487,6 +489,9 @@ class Board:
                             f"Rigged_Dice activated! All Dice will gain +{increase} "
                             f"starting next spin."
                         )
+                        def gold_total():
+                            gold_total = 0
+                            gold_total + int(increase)
 
         print("\n=========================")
         print(f"Total Matches: {len(chosen)}")
@@ -498,6 +503,8 @@ class Board:
             if retrigger_count > 0:
                 plural = "times" if retrigger_count > 1 else "time"
                 print(f"All patterns matched {retrigger_count} more {plural}!")
+            if self.global_golden_count > 0:
+                print("Total symbol base_value increase: " + str(gold_total()))
 
         print(f"Total Value: {total}")
         print("=========================\n")
