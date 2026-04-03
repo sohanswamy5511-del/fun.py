@@ -504,7 +504,7 @@ class Board:
                 plural = "times" if retrigger_count > 1 else "time"
                 print(f"All patterns matched {retrigger_count} more {plural}!")
             if self.global_golden_count > 0:
-                print("Total symbol base_value increase: " + str(gold_total()))
+                print("Total symbol base_value increase: " + (str(gold_total())))
 
         print(f"Total Value: {total}")
         print("=========================\n")
@@ -837,7 +837,6 @@ def main():
             print(f"\n--- SPIN {i + 1} ---")
             board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms)
             board.display_total(owned_charms)
-            sleep(1)
 
         print("\n==============================")
         print("      FINAL GRAND TOTAL")
