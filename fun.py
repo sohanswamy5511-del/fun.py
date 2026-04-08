@@ -649,25 +649,24 @@ class Board:
             sleep(1)
 
             # ------------------------------------------------
-            # GOLDEN PATTERN TRIGGER → APPLY PERMANENT BONUS
+            # GOLDEN SYMBOLS → QUEUE DELAYED BONUS
             # ------------------------------------------------
-            if len(golden_symbols) == len(cells):  # all symbols golden
-                stype = type(golden_symbols[0])
+            if golden_symbols:
+                pending_increases = {}
+                for s in golden_symbols:
+                    stype = type(s)
+                    pending_increases[stype] = pending_increases.get(stype, 0) + s.base_value
 
-                if stype is Coin:
-                    increase = 3 * len(golden_symbols)
-                elif stype is Dice:
-                    increase = 5 * len(golden_symbols)
-                else:
-                    increase = 0
-
-                if increase > 0:
+                for stype, increase in pending_increases.items():
+                    total_increase = increase * triggers
                     self.delayed_bonuses.append({
                         "symbol_type": stype,
-                        "increase": increase,
+                        "increase": total_increase,
                         "delay": 1
                     })
-                    print(f"Golden pattern! A delayed +{increase} bonus for all {stype.__name__}s has been queued for the next spin.")
+                    print(
+                        f"Golden symbol bonus queued! A delayed +{total_increase} bonus for all {stype.__name__}s has been queued for the next spin."
+                    )
 
         # ----------------------------------------------------
         # UPDATE DELAYED BONUSES
@@ -1332,9 +1331,9 @@ def main():
     BASE_MAX_SPINS = 8
     owned_charms = []
 
-    while money > 0:
-        board = Board(3, 5)
+    board = Board(3, 5)
 
+    while money > 0:
         # Compute max spins with charms
         max_spins = compute_effective_max_spins(BASE_MAX_SPINS, owned_charms)
 
