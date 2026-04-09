@@ -478,7 +478,7 @@ class Board:
     # FILL BOARD WITH SYMBOLS
     # --------------------------------------------------------
 
-    def fill_cells(self, symbol_classes, weights_override, owned_charms):
+    def fill_cells(self, symbol_classes, weights, owned_charms):
         """
         Fill empty cells with symbols, applying:
           - Weight overrides
@@ -487,23 +487,22 @@ class Board:
           - Activation (roll/spin/draw)
         """
 
-        # Build weights
-        weights = []
-        for cls in symbol_classes:
-            base_w = getattr(cls, "weight", 1)
-            w = weights_override.get(cls, base_w)
-            weights.append(w)
+        # Build weights list in order
+        weights_list = [weights[cls] for cls in symbol_classes]
 
         # Check charms
-        has_golden_coins = any(c.kind == "modifier" and c.target is Coin for c in owned_charms)
-        has_rigged_dice = any(c.kind == "modifier" and c.target is Dice for c in owned_charms)
+        has_golden_coins = any(d['charm'].kind == "modifier" and d['charm'].target is Coin for d in owned_charms)
+        has_rigged_dice = any(d['charm'].kind == "modifier" and d['charm'].target is Dice for d in owned_charms)
+        has_golden_spinners = any(d['charm'].kind == "modifier" and d['charm'].target is Spinner for d in owned_charms)
+        has_golden_cards = any(d['charm'].kind == "modifier" and d['charm'].target is Card for d in owned_charms)
+        has_golden_wheels = any(d['charm'].kind == "modifier" and d['charm'].target is Wheel for d in owned_charms)
 
         for x in range(self.rows):
             for y in range(self.cols):
                 if self.grid[x][y] is None:
 
                     # Choose symbol class
-                    symbol_class = random.choices(symbol_classes, weights=weights, k=1)[0]
+                    symbol_class = random.choices(symbol_classes, weights=weights_list, k=1)[0]
                     symbol = symbol_class()
 
                     # Apply permanent global bonus to current value so the
@@ -522,6 +521,21 @@ class Board:
                             symbol.display_name += " [GOLD]"
 
                     if isinstance(symbol, Dice) and has_rigged_dice:
+                        if random.randint(1, 100) <= 25:
+                            symbol.is_golden = True
+                            symbol.display_name += " [GOLD]"
+
+                    if isinstance(symbol, Spinner) and has_golden_spinners:
+                        if random.randint(1, 100) <= 25:
+                            symbol.is_golden = True
+                            symbol.display_name += " [GOLD]"
+
+                    if isinstance(symbol, Card) and has_golden_cards:
+                        if random.randint(1, 100) <= 25:
+                            symbol.is_golden = True
+                            symbol.display_name += " [GOLD]"
+
+                    if isinstance(symbol, Wheel) and has_golden_wheels:
                         if random.randint(1, 100) <= 30:
                             symbol.is_golden = True
                             symbol.display_name += " [GOLD]"
@@ -532,7 +546,7 @@ class Board:
     # SPIN
     # --------------------------------------------------------
 
-    def current_spin(self, symbol_classes, weights_override, owned_charms):
+    def current_spin(self, symbol_classes, weights, owned_charms):
         """
         Perform a new spin:
           - Apply pending bonuses
@@ -542,7 +556,7 @@ class Board:
         self.apply_pending_bonuses()
 
         self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]
-        self.fill_cells(symbol_classes, weights_override, owned_charms)
+        self.fill_cells(symbol_classes, weights, owned_charms)
         self.print_board()
         sleep(1)
 
@@ -602,8 +616,12 @@ class Board:
 
         # ----------------------------------------------------
         # RETRIGGER LOGIC
+        # Each retrigger charm has a 35% chance to trigger
         # ----------------------------------------------------
-        retrigger_count = sum(1 for c in owned_charms if c.kind == "retrigger")
+        retrigger_count = 0
+        for d in owned_charms:
+            if d['charm'].kind == "retrigger" and random.randint(1, 100) <= 35:
+                retrigger_count += 1
         triggers = 1 + retrigger_count
 
         # ----------------------------------------------------
@@ -698,12 +716,13 @@ class Charm:
       - retrigger: patterns trigger one extra time
     """
 
-    def __init__(self, name, description, kind, target=None, amount=0):
+    def __init__(self, name, description, kind, target=None, amount=0, cooldown_rounds=0):
         self.name = name
         self.description = description
-        self.kind = kind          # "extra_spin", "weight", "modifier", "retrigger"
+        self.kind = kind          # "extra_spin", "weight_active", "modifier", "retrigger"
         self.target = target      # Symbol class (Coin, Dice, etc.)
-        self.amount = amount      # numeric effect (weight +5, chance %, etc.)
+        self.amount = amount      # numeric effect (weight %, chance %, etc.)
+        self.cooldown_rounds = cooldown_rounds
 
     def __str__(self):
         return f"{self.name}: {self.description}"
@@ -721,48 +740,43 @@ Spare_Change = Charm(
 
 ImBadAtMath = Charm(
     "I'm Bad At Math",
-    "Patterns trigger one more time.",
+    "35% chance to trigger patterns one more time.",
     kind="retrigger"
 )
 
 Struck_Gold = Charm(
     "Struck Gold",
-    "Coins appear more often (+5 weight).",
-    kind="weight",
-    target=Coin,
-    amount=5
+    "Activate to increase all symbol spawn weights.",
+    kind="weight_active",
+    cooldown_rounds=3
 )
 
 Trick_Deck = Charm(
     "Trick Deck",
-    "Cards appear more often (+5 weight).",
-    kind="weight",
-    target=Card,
-    amount=5
+    "Activate to increase all symbol spawn weights.",
+    kind="weight_active",
+    cooldown_rounds=3
 )
 
 ILoveTops = Charm(
     "I Love Tops",
-    "Spinners appear more often (+5 weight).",
-    kind="weight",
-    target=Spinner,
-    amount=5
+    "Activate to increase all symbol spawn weights.",
+    kind="weight_active",
+    cooldown_rounds=3
 )
 
 Dice_Hard = Charm(
     "Dice Hard",
-    "Dice appear more often (+5 weight).",
-    kind="weight",
-    target=Dice,
-    amount=5
+    "Activate to increase all symbol spawn weights.",
+    kind="weight_active",
+    cooldown_rounds=3
 )
 
 WheelOfFortune = Charm(
     "Wheel of Fortune",
-    "Wheels appear more often (+5 weight).",
-    kind="weight",
-    target=Wheel,
-    amount=5
+    "Activate to increase all symbol spawn weights.",
+    kind="weight_active",
+    cooldown_rounds=3
 )
 
 GoldenCoins = Charm(
@@ -775,9 +789,33 @@ GoldenCoins = Charm(
 
 Rigged_Dice = Charm(
     "Rigged Dice",
-    "30% chance for Dice to spawn with the GOLD modifier.",
+    "25% chance for Dice to spawn with the GOLD modifier.",
     kind="modifier",
     target=Dice,
+    amount=25
+)
+
+GoldenSpinners = Charm(
+    "Golden Spinners",
+    "25% chance for Spinners to spawn with the GOLD modifier.",
+    kind="modifier",
+    target=Spinner,
+    amount=25
+)
+
+GoldenCards = Charm(
+    "Golden Cards",
+    "25% chance for Cards to spawn with the GOLD modifier.",
+    kind="modifier",
+    target=Card,
+    amount=25
+)
+
+GoldenWheels = Charm(
+    "Golden Wheels",
+    "30% chance for Wheels to spawn with the GOLD modifier.",
+    kind="modifier",
+    target=Wheel,
     amount=30
 )
 
@@ -790,7 +828,10 @@ ALL_CHARMS = [
     WheelOfFortune,
     ImBadAtMath,
     GoldenCoins,
-    Rigged_Dice
+    Rigged_Dice,
+    GoldenSpinners,
+    GoldenCards,
+    GoldenWheels
 ]
 
 
@@ -802,21 +843,29 @@ def compute_effective_max_spins(base_max_spins, owned_charms):
     """
     Extra spin charms increase max spins per round.
     """
-    extra = sum(1 for c in owned_charms if c.kind == "extra_spin")
+    extra = sum(1 for d in owned_charms if d['charm'].kind == "extra_spin")
     return base_max_spins + extra
 
 
-def compute_weight_overrides(owned_charms):
+def compute_weight_overrides(symbol_classes, active_bonuses):
     """
-    Weight charms increase spawn weight for specific symbol types.
+    Compute weights with active bonuses, normalized to sum to 100.
     """
-    overrides = {}
+    weights = {}
+    for cls in symbol_classes:
+        if cls in active_bonuses:
+            weights[cls] = active_bonuses[cls]
+        else:
+            base_w = getattr(cls, "weight", 1)
+            weights[cls] = base_w
 
-    for c in owned_charms:
-        if c.kind == "weight" and c.target is not None:
-            overrides[c.target] = overrides.get(c.target, getattr(c.target, "weight", 1)) + c.amount
+    # Normalize to sum 100
+    total = sum(weights.values())
+    if total > 0:
+        for cls in weights:
+            weights[cls] = weights[cls] * 100 / total
 
-    return overrides
+    return weights
 
 
 # ============================================================
@@ -835,7 +884,7 @@ def store_phase(money, owned_charms):
     print(f"You have ${money}. Charms cost $5 each.")
 
     # Filter out charms already owned
-    available = [c for c in ALL_CHARMS if c not in owned_charms]
+    available = [c for c in ALL_CHARMS if c not in [d['charm'] for d in owned_charms]]
 
     if not available:
         print("No more charms available.")
@@ -870,405 +919,7 @@ def store_phase(money, owned_charms):
 
     # Purchase charm
     chosen = stock[idx]
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
-    owned_charms.append(chosen)
+    owned_charms.append({'charm': chosen, 'uses': 0, 'cooldown': 0, 'last_increase': 0, 'activations_this_round': 0})
 
     money -= 5
 
@@ -1290,7 +941,7 @@ def get_spin_amount(money, max_spins):
 
     while True:
         print(f"You have ${money}. Each spin costs $1.")
-        print(f"Enter number of spins (max {max_spins}), 'store' to visit store, or 'q' to quit.")
+        print(f"Enter number of spins (max {max_spins}), 'store' to visit store, 'charm' to activate charms, or 'q' to quit.")
         choice = input("> ").strip().lower()
 
         if choice == "q":
@@ -1298,6 +949,9 @@ def get_spin_amount(money, max_spins):
 
         if choice == "store":
             return "store"
+
+        if choice == "charm":
+            return "charm"
 
         if not choice.isdigit():
             print("Invalid input. Please enter a number.")
@@ -1321,6 +975,63 @@ def get_spin_amount(money, max_spins):
 
 
 # ============================================================
+# CHARM ACTIVATION PHASE
+# ============================================================
+
+def charm_phase(owned_charms, active_bonuses, symbol_classes=None):
+    """
+    Allow player to activate weight charms that are off cooldown.
+    """
+    if symbol_classes is None:
+        symbol_classes = BASE_SYMBOL_CLASSES
+    
+    available = [d for d in owned_charms if d['cooldown'] == 0 and d['charm'].kind == "weight_active"]
+
+    if not available:
+        print("No weight charms available to activate.")
+        return
+
+    print("\nAvailable weight charms to activate:")
+    for i, d in enumerate(available):
+        charm = d['charm']
+        if d['last_increase'] == 0:
+            print(f"{i+1}: {charm.name} (adds 20 to all weights)")
+        else:
+            next_increase = d['last_increase'] * 0.9
+            print(f"{i+1}: {charm.name} (adds {next_increase:.1f} to all weights)")
+
+    print("Enter the number to activate, or press Enter to skip.")
+
+    choice = input("> ").strip()
+
+    if not choice.isdigit():
+        return
+
+    idx = int(choice) - 1
+
+    if 0 <= idx < len(available):
+        d = available[idx]
+        if d['activations_this_round'] == 0:
+            # First activation this round: add 20 to all active bonuses
+            increase = 20
+            for cls in symbol_classes:
+                active_bonuses[cls] = active_bonuses.get(cls, getattr(cls, "weight", 1)) + increase
+            d['last_increase'] = increase
+            print(f"Activated {d['charm'].name}! All symbol weights increased by {increase}.")
+        else:
+            # Subsequent activations this round: add 90% of last increase
+            increase = d['last_increase'] * 0.9
+            for cls in symbol_classes:
+                active_bonuses[cls] = active_bonuses[cls] + increase
+            d['last_increase'] = increase
+            print(f"Activated {d['charm'].name}! All symbol weights increased by {increase:.1f}.")
+        
+        d['activations_this_round'] += 1
+        d['uses'] += 1
+        d['cooldown'] = 3
+
+
+# ============================================================
 # MAIN GAME LOOP
 # ============================================================
 
@@ -1330,6 +1041,7 @@ def main():
     money = 16
     BASE_MAX_SPINS = 8
     owned_charms = []
+    active_bonuses = {}
 
     board = Board(3, 5)
 
@@ -1348,11 +1060,21 @@ def main():
             money, owned_charms = store_phase(money, owned_charms)
             continue
 
+        if choice == "charm":
+            charm_phase(owned_charms, active_bonuses, BASE_SYMBOL_CLASSES)
+            continue
+
         spins = choice
         money -= spins
 
-        # Weight overrides from charms
-        weight_overrides = compute_weight_overrides(owned_charms)
+        # Update cooldowns and reset round activation counters at start of round
+        for d in owned_charms:
+            if d['cooldown'] > 0:
+                d['cooldown'] -= 1
+            d['activations_this_round'] = 0
+
+        # Weight overrides from active bonuses
+        weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses)
 
         # Reset grand total for this round
         board.grand_total = 0
@@ -1362,6 +1084,12 @@ def main():
             print(f"\n--- SPIN {i+1} ---")
             board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms)
             board.display_total(owned_charms)
+            
+            # Allow charm activation after each spin
+            charm_phase(owned_charms, active_bonuses, BASE_SYMBOL_CLASSES)
+            
+            # Recalculate weights after charm activation
+            weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses)
 
         # Round summary
         print("\n==============================")
