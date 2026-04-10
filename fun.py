@@ -516,17 +516,17 @@ class Board:
 
                     # Golden modifier chance
                     if isinstance(symbol, Coin) and has_golden_coins:
-                        if random.randint(1, 100) <= 20:
+                        if random.randint(1, 100) <= 25:
                             symbol.is_golden = True
                             symbol.display_name += " [GOLD]"
 
                     if isinstance(symbol, Dice) and has_rigged_dice:
-                        if random.randint(1, 100) <= 25:
+                        if random.randint(1, 100) <= 20:
                             symbol.is_golden = True
                             symbol.display_name += " [GOLD]"
 
                     if isinstance(symbol, Spinner) and has_golden_spinners:
-                        if random.randint(1, 100) <= 25:
+                        if random.randint(1, 100) <= 30:
                             symbol.is_golden = True
                             symbol.display_name += " [GOLD]"
 
@@ -536,7 +536,7 @@ class Board:
                             symbol.display_name += " [GOLD]"
 
                     if isinstance(symbol, Wheel) and has_golden_wheels:
-                        if random.randint(1, 100) <= 30:
+                        if random.randint(1, 100) <= 25:
                             symbol.is_golden = True
                             symbol.display_name += " [GOLD]"
 
@@ -623,6 +623,10 @@ class Board:
             if d['charm'].kind == "retrigger" and random.randint(1, 100) <= 35:
                 retrigger_count += 1
         triggers = 1 + retrigger_count
+
+        if retrigger_count > 0:
+            print("I'm Bad At Math activated! Retriggering patterns...")
+            sleep(0.5)
 
         # ----------------------------------------------------
         # SCORE EACH PATTERN
@@ -781,26 +785,26 @@ WheelOfFortune = Charm(
 
 GoldenCoins = Charm(
     "Golden Coins",
-    "20% chance for Coins to spawn with the GOLD modifier.",
+    "25% chance for Coins to spawn with the GOLD modifier.",
     kind="modifier",
     target=Coin,
-    amount=20
+    amount=25
 )
 
 Rigged_Dice = Charm(
     "Rigged Dice",
-    "25% chance for Dice to spawn with the GOLD modifier.",
+    "20% chance for Dice to spawn with the GOLD modifier.",
     kind="modifier",
     target=Dice,
-    amount=25
+    amount=20
 )
 
 GoldenSpinners = Charm(
     "Golden Spinners",
-    "25% chance for Spinners to spawn with the GOLD modifier.",
+    "30% chance for Spinners to spawn with the GOLD modifier.",
     kind="modifier",
     target=Spinner,
-    amount=25
+    amount=30
 )
 
 GoldenCards = Charm(
@@ -813,10 +817,10 @@ GoldenCards = Charm(
 
 GoldenWheels = Charm(
     "Golden Wheels",
-    "30% chance for Wheels to spawn with the GOLD modifier.",
+    "25% chance for Wheels to spawn with the GOLD modifier.",
     kind="modifier",
     target=Wheel,
-    amount=30
+    amount=25
 )
 
 ALL_CHARMS = [
