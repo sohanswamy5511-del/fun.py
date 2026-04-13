@@ -12,43 +12,53 @@
             font-family: 'Courier New', monospace;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            margin: 0;
+            padding: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            overflow: hidden;
         }
         .container {
             background: #1a1a1a;
-            border-radius: 10px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            width: 100%;
-            max-width: 900px;
+            border-radius: 0;
+            box-shadow: none;
+            width: 100vw;
+            height: 100vh;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 20px;
+            padding: 15px 20px;
             text-align: center;
-            font-size: 24px;
+            font-size: 20px;
             font-weight: bold;
+            flex-shrink: 0;
         }
         .game-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
             padding: 20px;
+            min-height: 0;
         }
         #output {
             background: #000;
             border: 2px solid #00ff00;
             color: #00ff00;
-            padding: 15px;
-            height: 500px;
+            padding: 20px;
+            flex: 1;
             overflow-y: auto;
-            font-size: 13px;
+            font-size: 14px;
             line-height: 1.4;
             margin-bottom: 15px;
             white-space: pre-wrap;
             word-wrap: break-word;
             border-radius: 5px;
+            scroll-behavior: smooth;
         }
         #output::-webkit-scrollbar {
             width: 8px;
@@ -63,7 +73,9 @@
         .input-area {
             display: flex;
             gap: 10px;
-            margin-top: 15px;
+            margin-top: auto;
+            padding-top: 15px;
+            flex-shrink: 0;
         }
         #userInput {
             flex: 1;
@@ -170,31 +182,26 @@
         }
 
         async function pollOutput() {
-            let isAtBottom = true;
-            
             while (gameRunning) {
                 try {
                     const response = await fetch('/api/get-output');
                     const data = await response.json();
                     
                     if (data.output) {
-                        // Check if user is scrolled to bottom before adding content
-                        const wasAtBottom = output.scrollHeight - output.clientHeight <= output.scrollTop + 10;
-                        
                         // Insert HTML content
                         output.insertAdjacentHTML('beforeend', data.output);
                         
-                        // Only auto-scroll if user was at bottom
-                        if (wasAtBottom) {
+                        // Always auto-scroll to bottom for new content
+                        requestAnimationFrame(() => {
                             output.scrollTop = output.scrollHeight;
-                        }
+                        });
                     }
                 } catch (error) {
                     console.error('Polling error:', error);
                 }
                 
-                // Poll every 300ms
-                await new Promise(resolve => setTimeout(resolve, 300));
+                // Poll every 200ms for more responsive updates
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
         }
 

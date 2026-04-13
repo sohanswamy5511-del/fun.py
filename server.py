@@ -126,14 +126,17 @@ def start_game():
     global game_process, game_thread
     
     try:
-        # Start the game process
+        # Start the game process with unbuffered output so text appears immediately
+        env = os.environ.copy()
+        env['PYTHONUNBUFFERED'] = '1'
         game_process = subprocess.Popen(
-            ['python', '/workspaces/fun.py/fun.py'],
+            ['python', '-u', '/workspaces/fun.py/fun.py'],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             bufsize=1,
-            universal_newlines=False
+            universal_newlines=False,
+            env=env
         )
         
         # Start threads to handle I/O
