@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎰 Slot Machine Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: #1a1a1a;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 900px;
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .game-area {
+            padding: 20px;
+        }
+        #output {
+            background: #000;
+            border: 2px solid #00ff00;
+            color: #00ff00;
+            padding: 15px;
+            height: 500px;
+            overflow-y: auto;
+            font-size: 13px;
+            line-height: 1.4;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border-radius: 5px;
+        }
+        #output::-webkit-scrollbar {
+            width: 8px;
+        }
+        #output::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        #output::-webkit-scrollbar-thumb {
+            background: #00ff00;
+            border-radius: 4px;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        #userInput {
+            flex: 1;
+            padding: 12px;
+            background: #222;
+            border: 2px solid #00ff00;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border-radius: 5px;
+        }
+        #userInput:focus {
+            outline: none;
+            background: #2a2a2a;
+        }
+        button {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .symbol-container {
+            position: relative;
+            display: inline-block;
+            margin: 0 2px;
+            vertical-align: middle;
+        }
+        .symbol-image {
+            width: 40px;
+            height: 40px;
+        }
+        .multiplier-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">🎰 SLOT MACHINE GAME</div>
+        <div class="game-area">
+            <div id="output">Initializing game...</div>
+            <div class="input-area">
+                <input 
+                    type="text" 
+                    id="userInput" 
+                    placeholder="Enter your choice and press Enter..." 
+                    autocomplete="off"
+                >
+                <button onclick="sendInput()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        const userInput = document.getElementById('userInput');
+        let gameRunning = false;
+        
+        // Start the game when page loads
+        window.addEventListener('load', () => {
+            startGame();
+        });
+
+        async function startGame() {
+            try {
+                const response = await fetch('/api/start-game', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    gameRunning = true;
+                    userInput.focus();
+                    // Clear the initializing message
+                    output.textContent = '';
+                    pollOutput();
+                } else {
+                    output.textContent = 'Error: ' + data.message;
+                }
+            } catch (error) {
+                output.textContent = 'Error connecting to server: ' + error.message;
+            }
+        }
+
+        async function pollOutput() {
+            let isAtBottom = true;
+            
+            while (gameRunning) {
+                try {
+                    const response = await fetch('/api/get-output');
+                    const data = await response.json();
+                    
+                    if (data.output) {
+                        // Check if user is scrolled to bottom before adding content
+                        const wasAtBottom = output.scrollHeight - output.clientHeight <= output.scrollTop + 10;
+                        
+                        // Insert HTML content
+                        output.insertAdjacentHTML('beforeend', data.output);
+                        
+                        // Only auto-scroll if user was at bottom
+                        if (wasAtBottom) {
+                            output.scrollTop = output.scrollHeight;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+                
+                // Poll every 300ms
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        }
+
+        async function sendInput() {
+            const input = userInput.value.trim();
+            if (!input) return;
+
+            userInput.value = '';
+            
+            try {
+                const response = await fetch('/api/send-input', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ input: input })
+                });
+                
+                if (!response.ok) {
+                    console.error('Failed to send input');
+                }
+            } catch (error) {
+                console.error('Error sending input:', error);
+            }
+        }
+
+        // Handle Enter key
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendInput();
+            }
+        });
+    </script>
+</body>
+</html>
