@@ -13,76 +13,22 @@ app.secret_key = 'fun-game-secret'
 game_process = None
 output_queue = queue.Queue()
 input_queue = queue.Queue()
-game_thread = None
-output_buffer = []  # Buffer for collecting output before sending
+output_buffer = []
 last_output_time = time.time()
 
 # Symbol mapping for images
 SYMBOL_IMAGES = {
     'Coin': 'coin.svg',
-    'Spinner': 'spinner.svg', 
+    'Spinner': 'spinner.svg',
     'Dice': 'dice.svg',
     'Card': 'card.svg',
     'Wheel': 'wheel.svg'
 }
 
-def read_output():
-    """Read output from game process and buffer it before sending"""
-    global game_process, output_buffer, last_output_time
-    if game_process:
-        while True:
-            try:
-                line = game_process.stdout.readline()
-                if not line:
-                    break
-                # Process the line to replace symbols with images
-                processed_line = process_line_for_images(line.decode('utf-8', errors='ignore'))
-                
-                # Send welcome message immediately (don't buffer it)
-                if "Welcome to the Slot Machine Game" in processed_line:
-                    output_queue.put(processed_line)
-                    last_output_time = time.time()
-                    continue
-                
-                # Check if this is the start of a new spin
-                if "--- SPIN" in processed_line:
-                    # Send any buffered output first
-                    if output_buffer:
-                        combined_output = ''.join(output_buffer)
-                        output_queue.put(combined_output)
-                        output_buffer.clear()
-                    
-                    # Add a delay before the spin (1 second)
-                    time.sleep(1.0)
-                    
-                    # Send the spin header
-                    output_queue.put(processed_line)
-                    last_output_time = time.time()
-                    continue
-                
-                # Add other lines to buffer
-                output_buffer.append(processed_line)
-                
-                # Send buffer if it's been more than 200ms or buffer is getting large
-                current_time = time.time()
-                if (current_time - last_output_time > 0.2) or (len(output_buffer) > 10):
-                    if output_buffer:
-                        combined_output = ''.join(output_buffer)
-                        output_queue.put(combined_output)
-                        output_buffer.clear()
-                        last_output_time = current_time
-                        
-            except Exception as e:
-                output_queue.put(f"[Error reading output: {e}]\n")
-                break
-
 def process_line_for_images(line):
     """Replace symbol display names with HTML image tags with multiplier overlay"""
-    # Pattern to match symbol display names like "Coin (Heads)", "Spinner (x12)", etc.
     for symbol_name, image_file in SYMBOL_IMAGES.items():
-        # Replace symbol names with image tags including multiplier
         if symbol_name == 'Coin':
-            # Special handling for Coin - extract Heads/Tails and convert to multiplier
             pattern = r'Coin \((Heads|Tails)\)'
             def coin_replacer(match):
                 result = match.group(1)
@@ -90,31 +36,73 @@ def process_line_for_images(line):
                 return f'<div class="symbol-container"><img src="/static/images/{image_file}" alt="Coin ({result})" title="Coin ({result})" class="symbol-image"><div class="multiplier-overlay">{mult}</div></div>'
             line = re.sub(pattern, coin_replacer, line)
         else:
-            # For other symbols, extract the multiplier from (x{number})
             pattern = rf'({re.escape(symbol_name)}\s*\(x(\d+)\))'
             def replacer(match):
                 full_match = match.group(1)
                 mult = match.group(2)
                 return f'<div class="symbol-container"><img src="/static/images/{image_file}" alt="{full_match}" title="{full_match}" class="symbol-image"><div class="multiplier-overlay">{mult}</div></div>'
             line = re.sub(pattern, replacer, line)
-    
     return line
 
+def read_output():
+    """Continuously read output from the game process"""
+    global game_process, output_buffer, last_output_time
+
+    while True:
+        if not game_process:
+            time.sleep(0.05)
+            continue
+
+        line = game_process.stdout.readline()
+        if not line:
+            time.sleep(0.01)
+            continue
+
+        processed_line = process_line_for_images(line)
+
+        # Send welcome message immediately
+        if "Welcome to the Slot Machine Game" in processed_line:
+            output_queue.put(processed_line)
+            last_output_time = time.time()
+            continue
+
+        # Detect start of spin
+        if "--- SPIN" in processed_line:
+            if output_buffer:
+                output_queue.put(''.join(output_buffer))
+                output_buffer.clear()
+
+            time.sleep(1.0)
+            output_queue.put(processed_line)
+            last_output_time = time.time()
+            continue
+
+        # Normal buffering
+        output_buffer.append(processed_line)
+
+        now = time.time()
+        if (now - last_output_time > 0.2) or len(output_buffer) > 10:
+            output_queue.put(''.join(output_buffer))
+            output_buffer.clear()
+            last_output_time = now
+
 def send_input():
-    """Send input from queue to game process"""
+    """Send queued input to the game process"""
     global game_process
-    if game_process:
-        while True:
-            try:
-                user_input = input_queue.get(timeout=1)
-                if user_input:
-                    game_process.stdin.write((user_input + '\n').encode())
-                    game_process.stdin.flush()
-            except queue.Empty:
-                pass
-            except Exception as e:
-                print(f"Error sending input: {e}")
-                break
+
+    while True:
+        if not game_process:
+            time.sleep(0.05)
+            continue
+
+        try:
+            user_input = input_queue.get(timeout=1)
+            game_process.stdin.write(user_input + '\n')
+            game_process.stdin.flush()
+        except queue.Empty:
+            pass
+        except Exception as e:
+            print(f"Error sending input: {e}")
 
 @app.route('/')
 def index():
@@ -123,33 +111,32 @@ def index():
 @app.route('/api/start-game', methods=['POST'])
 def start_game():
     """Start the slot machine game"""
-    global game_process, game_thread
-    
+    global game_process
+
     try:
-        # Start the game process with unbuffered output so text appears immediately
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
+
         game_process = subprocess.Popen(
             ['python', '-u', '/workspaces/fun.py/fun.py'],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=1,
-            universal_newlines=False,
+            bufsize=0,
+            universal_newlines=True,
             env=env
         )
-        
-        # Start threads to handle I/O
+
         threading.Thread(target=read_output, daemon=True).start()
         threading.Thread(target=send_input, daemon=True).start()
-        
+
         return jsonify({'status': 'ok', 'message': 'Game started'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/get-output', methods=['GET'])
 def get_output():
-    """Get accumulated output from game"""
+    """Return accumulated output"""
     output = ""
     try:
         while True:
@@ -160,7 +147,7 @@ def get_output():
 
 @app.route('/api/send-input', methods=['POST'])
 def send_user_input():
-    """Send user input to game"""
+    """Receive button commands from the browser"""
     user_input = request.json.get('input', '').strip()
     if user_input:
         input_queue.put(user_input)
