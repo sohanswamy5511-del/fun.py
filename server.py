@@ -5,18 +5,16 @@ import queue
 import time
 import os
 import re
+import signal
 
 app = Flask(__name__, static_folder='static')
 app.secret_key = 'fun-game-secret'
 
-# Global state for game process
+# Global state
 game_process = None
 output_queue = queue.Queue()
 input_queue = queue.Queue()
-output_buffer = []
-last_output_time = time.time()
 
-# Symbol mapping for images
 SYMBOL_IMAGES = {
     'Coin': 'coin.svg',
     'Spinner': 'spinner.svg',
@@ -26,27 +24,37 @@ SYMBOL_IMAGES = {
 }
 
 def process_line_for_images(line):
-    """Replace symbol display names with HTML image tags with multiplier overlay"""
+    """Replace symbol names with HTML image tiles."""
     for symbol_name, image_file in SYMBOL_IMAGES.items():
         if symbol_name == 'Coin':
             pattern = r'Coin \((Heads|Tails)\)'
             def coin_replacer(match):
                 result = match.group(1)
                 mult = '5' if result == 'Heads' else '1'
-                return f'<div class="symbol-container"><img src="/static/images/{image_file}" alt="Coin ({result})" title="Coin ({result})" class="symbol-image"><div class="multiplier-overlay">{mult}</div></div>'
+                return (
+                    f'<div class="symbol-container">'
+                    f'<img src="/static/images/{image_file}" class="symbol-image">'
+                    f'<div class="multiplier-overlay">{mult}</div>'
+                    f'</div>'
+                )
             line = re.sub(pattern, coin_replacer, line)
         else:
             pattern = rf'({re.escape(symbol_name)}\s*\(x(\d+)\))'
             def replacer(match):
                 full_match = match.group(1)
                 mult = match.group(2)
-                return f'<div class="symbol-container"><img src="/static/images/{image_file}" alt="{full_match}" title="{full_match}" class="symbol-image"><div class="multiplier-overlay">{mult}</div></div>'
+                return (
+                    f'<div class="symbol-container">'
+                    f'<img src="/static/images/{image_file}" class="symbol-image">'
+                    f'<div class="multiplier-overlay">{mult}</div>'
+                    f'</div>'
+                )
             line = re.sub(pattern, replacer, line)
     return line
 
 def read_output():
-    """Continuously read output from the game process"""
-    global game_process, output_buffer, last_output_time
+    """Continuously read output from the game process and flush instantly."""
+    global game_process
 
     while True:
         if not game_process:
@@ -60,34 +68,11 @@ def read_output():
 
         processed_line = process_line_for_images(line)
 
-        # Send welcome message immediately
-        if "Welcome to the Slot Machine Game" in processed_line:
-            output_queue.put(processed_line)
-            last_output_time = time.time()
-            continue
-
-        # Detect start of spin
-        if "--- SPIN" in processed_line:
-            if output_buffer:
-                output_queue.put(''.join(output_buffer))
-                output_buffer.clear()
-
-            time.sleep(1.0)
-            output_queue.put(processed_line)
-            last_output_time = time.time()
-            continue
-
-        # Normal buffering
-        output_buffer.append(processed_line)
-
-        now = time.time()
-        if (now - last_output_time > 0.2) or len(output_buffer) > 10:
-            output_queue.put(''.join(output_buffer))
-            output_buffer.clear()
-            last_output_time = now
+        # INSTANT FLUSH — no buffering at all
+        output_queue.put(processed_line)
 
 def send_input():
-    """Send queued input to the game process"""
+    """Send queued input to the game process."""
     global game_process
 
     while True:
@@ -104,14 +89,37 @@ def send_input():
         except Exception as e:
             print(f"Error sending input: {e}")
 
+def stop_game():
+    """Kill any existing game process."""
+    global game_process
+    if game_process and game_process.poll() is None:
+        try:
+            game_process.terminate()
+            try:
+                game_process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                game_process.kill()
+        except Exception as e:
+            print(f"Error stopping game: {e}")
+    game_process = None
+
+def reset_state():
+    """Reset all queues."""
+    global output_queue, input_queue
+    output_queue = queue.Queue()
+    input_queue = queue.Queue()
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/api/start-game', methods=['POST'])
 def start_game():
-    """Start the slot machine game"""
+    """Always start a fresh game on every page load."""
     global game_process
+
+    stop_game()
+    reset_state()
 
     try:
         env = os.environ.copy()
@@ -130,13 +138,12 @@ def start_game():
         threading.Thread(target=read_output, daemon=True).start()
         threading.Thread(target=send_input, daemon=True).start()
 
-        return jsonify({'status': 'ok', 'message': 'Game started'})
+        return jsonify({'status': 'started'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/get-output', methods=['GET'])
 def get_output():
-    """Return accumulated output"""
     output = ""
     try:
         while True:
@@ -147,7 +154,6 @@ def get_output():
 
 @app.route('/api/send-input', methods=['POST'])
 def send_user_input():
-    """Receive button commands from the browser"""
     user_input = request.json.get('input', '').strip()
     if user_input:
         input_queue.put(user_input)

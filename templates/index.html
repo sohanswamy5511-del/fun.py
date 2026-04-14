@@ -16,7 +16,6 @@
             text-align: center;
         }
 
-        /* Terminal output area */
         #terminal {
             background-color: #000;
             border: 2px solid #0f0;
@@ -24,16 +23,10 @@
             height: 600px;
             overflow-y: auto;
             margin-bottom: 20px;
-
-            /* CRITICAL FIX: preserve newlines EXACTLY */
             white-space: pre;
             font-family: monospace;
-
-            /* Helps align rows of symbols */
-            line-height: 52px;
         }
 
-        /* Button bar */
         .button-row {
             display: flex;
             justify-content: center;
@@ -57,7 +50,6 @@
             background-color: #0a0;
         }
 
-        /* Symbol container — behaves like a single tile */
         .symbol-container {
             display: inline-block;
             position: relative;
@@ -67,7 +59,6 @@
             vertical-align: middle;
         }
 
-        /* Symbol image */
         .symbol-image {
             width: 100%;
             height: 100%;
@@ -75,7 +66,6 @@
             display: block;
         }
 
-        /* Multiplier overlay */
         .multiplier-overlay {
             position: absolute;
             bottom: -2px;
@@ -96,22 +86,40 @@
 
     <div id="terminal"></div>
 
-    <!-- BUTTON CONTROLS -->
-    <div class="button-row">
-        <button onclick="sendCommand('1')">Spin 1</button>
-        <button onclick="sendCommand('5')">Spin 5</button>
-        <button onclick="sendCommand('store')">Store</button>
-        <button onclick="sendCommand('charm')">Charm</button>
+    <!-- NORMAL GAMEPLAY BUTTONS -->
+    <div id="normal-buttons" class="button-row">
+        <button onclick="spinMax()">Spin Max</button>
+        <button onclick="spinHalf()">Spin ½ Max</button>
+        <button onclick="openStore()">Store</button>
+        <button onclick="openCharm()">Charm</button>
         <button onclick="sendCommand('q')">Quit</button>
+    </div>
+
+    <!-- STORE MODE BUTTONS -->
+    <div id="store-buttons" class="button-row" style="display:none;">
+        <button onclick="storeChoice('1')">1</button>
+        <button onclick="storeChoice('2')">2</button>
+        <button onclick="storeChoice('3')">3</button>
+        <button onclick="storeChoice('4')">4</button>
+        <button onclick="storeChoice('leave')">Leave</button>
+    </div>
+
+    <!-- CHARM MODE BUTTONS -->
+    <div id="charm-buttons" class="button-row" style="display:none;">
+        <button onclick="charmChoice('1')">1</button>
+        <button onclick="charmChoice('2')">2</button>
+        <button onclick="charmChoice('3')">3</button>
+        <button onclick="charmChoice('leave')">Leave</button>
     </div>
 
     <script>
         const terminal = document.getElementById('terminal');
+        let uiMode = "normal";
 
-        // Start the game automatically
+        // Start game
         fetch('/api/start-game', { method: 'POST' });
 
-        // Poll for output every 200ms
+        // Poll output
         setInterval(async () => {
             const res = await fetch('/api/get-output');
             const data = await res.json();
@@ -121,13 +129,77 @@
             }
         }, 200);
 
-        // Send a command to the server
         function sendCommand(cmd) {
             fetch('/api/send-input', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ input: cmd })
             });
+        }
+
+        // Money extraction
+        function extractMoney() {
+            const text = terminal.innerText;
+            const matches = [...text.matchAll(/You have \$(\d+)/g)];
+            if (matches.length === 0) return 0;
+            return parseInt(matches[matches.length - 1][1], 10);
+        }
+
+        function spinMax() {
+            const money = extractMoney();
+            const maxSpins = Math.min(money, 8);
+            if (maxSpins > 0) sendCommand(String(maxSpins));
+        }
+
+        function spinHalf() {
+            const money = extractMoney();
+            const maxSpins = Math.min(money, 8);
+            const half = Math.floor(maxSpins / 2);
+            if (half > 0) sendCommand(String(half));
+        }
+
+        // UI MODE SWITCHING
+        function showNormalButtons() {
+            document.getElementById("normal-buttons").style.display = "flex";
+            document.getElementById("store-buttons").style.display = "none";
+            document.getElementById("charm-buttons").style.display = "none";
+            uiMode = "normal";
+        }
+
+        function showStoreButtons() {
+            document.getElementById("normal-buttons").style.display = "none";
+            document.getElementById("store-buttons").style.display = "flex";
+            document.getElementById("charm-buttons").style.display = "none";
+            uiMode = "store";
+        }
+
+        function showCharmButtons() {
+            document.getElementById("normal-buttons").style.display = "none";
+            document.getElementById("store-buttons").style.display = "none";
+            document.getElementById("charm-buttons").style.display = "flex";
+            uiMode = "charm";
+        }
+
+        // STORE MODE
+        function openStore() {
+            sendCommand("store");
+            showStoreButtons();
+        }
+
+        function storeChoice(option) {
+            sendCommand(option);
+            showNormalButtons();
+        }
+
+        // CHARM MODE
+        function openCharm() {
+            sendCommand("charm");
+            showCharmButtons();
+        }
+
+        function charmChoice(option) {
+            sendCommand(option);
+            showNormalButtons();
         }
     </script>
 
