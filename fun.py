@@ -303,7 +303,6 @@ class HorizontalLineXL(Pattern):
             base_multiplier_value=3
         )
 
-
 # ============================================================
 # SPOON PATTERN (A = relative, B = absolute)
 # ============================================================
@@ -417,6 +416,7 @@ PATTERNS = [
     Jackpot()
 ]
 
+
 # ============================================================
 # BOARD SYSTEM
 # ============================================================
@@ -505,8 +505,7 @@ class Board:
                     symbol_class = random.choices(symbol_classes, weights=weights_list, k=1)[0]
                     symbol = symbol_class()
 
-                    # Apply permanent global bonus to current value so the
-                    # symbol's multiplier uses the increased value.
+                    # Apply permanent global bonus
                     bonus = self.global_symbol_bonuses.get(symbol_class, 0)
                     if bonus:
                         symbol.current_value += bonus
@@ -707,6 +706,7 @@ class Board:
         self.grand_total += total
         return total
 
+
 # ============================================================
 # CHARM SYSTEM
 # ============================================================
@@ -715,17 +715,17 @@ class Charm:
     """
     A charm modifies gameplay in one of several ways:
       - extra_spin: +1 max spin per round
-      - weight: increases spawn weight of a symbol type
-      - modifier: gives a chance for symbols to spawn golden
+      - weight_active: increases spawn weight of a symbol type
+      - modifier: chance for symbols to spawn golden
       - retrigger: patterns trigger one extra time
     """
 
     def __init__(self, name, description, kind, target=None, amount=0, cooldown_rounds=0):
         self.name = name
         self.description = description
-        self.kind = kind          # "extra_spin", "weight_active", "modifier", "retrigger"
-        self.target = target      # Symbol class (Coin, Dice, etc.)
-        self.amount = amount      # numeric effect (weight %, chance %, etc.)
+        self.kind = kind
+        self.target = target
+        self.amount = amount
         self.cooldown_rounds = cooldown_rounds
 
     def __str__(self):
@@ -876,7 +876,6 @@ def compute_weight_overrides(symbol_classes, active_bonuses):
 
     return weights
 
-
 # ============================================================
 # STORE SYSTEM
 # ============================================================
@@ -935,6 +934,7 @@ def store_phase(money, owned_charms):
     print(f"You bought: {chosen.name}")
     return money, owned_charms
 
+
 # ============================================================
 # INPUT HELPERS
 # ============================================================
@@ -945,6 +945,7 @@ def get_spin_amount(money, max_spins):
     Options:
       - Enter a number (1 to max_spins)
       - Enter 'store' to visit the store
+      - Enter 'charm' to activate charms
       - Enter 'q' to quit
     """
 
@@ -984,60 +985,49 @@ def get_spin_amount(money, max_spins):
 
 
 # ============================================================
-# CHARM ACTIVATION PHASE
+# AUTO‑ACTIVATE‑ALL CHARM PHASE (UPDATED)
 # ============================================================
 
 def charm_phase(owned_charms, active_bonuses, symbol_classes=None):
     """
-    Allow player to activate weight charms that are off cooldown.
+    NEW BEHAVIOR:
+    When the player types 'charm', ALL weight_active charms that are off cooldown
+    automatically activate, in order, with no menu.
+
+    Each charm keeps its own diminishing-return chain (Option C).
     """
+
     if symbol_classes is None:
         symbol_classes = BASE_SYMBOL_CLASSES
-    
+
+    # All weight charms that can be activated
     available = [d for d in owned_charms if d['cooldown'] == 0 and d['charm'].kind == "weight_active"]
 
     if not available:
         print("No weight charms available to activate.")
         return
 
-    print("\nAvailable weight charms to activate:")
-    for i, d in enumerate(available):
+    print("\nActivating ALL available weight charms...")
+
+    for d in available:
         charm = d['charm']
-        target_name = charm.target.__name__ if charm.target else "Unknown"
-        if d['last_increase'] == 0:
-            print(f"{i+1}: {charm.name} (adds 20 to {target_name} weight)")
-        else:
-            next_increase = d['last_increase'] * 0.9
-            print(f"{i+1}: {charm.name} (adds {next_increase:.1f} to {target_name} weight)")
+        target_cls = charm.target
+        target_name = target_cls.__name__
 
-    print("Enter the number to activate, or press Enter to skip.")
-
-    choice = input("> ").strip()
-
-    if not choice.isdigit():
-        return
-
-    idx = int(choice) - 1
-
-    if 0 <= idx < len(available):
-        d = available[idx]
-        target_cls = d['charm'].target
-        
+        # First activation this round
         if d['activations_this_round'] == 0:
-            # First activation this round: add 20 to target symbol
             increase = 20
             active_bonuses[target_cls] = active_bonuses.get(target_cls, getattr(target_cls, "weight", 1)) + increase
             d['last_increase'] = increase
-            target_name = target_cls.__name__
-            print(f"Activated {d['charm'].name}! {target_name} weight increased by {increase}.")
+            print(f"{charm.name} activated! {target_name} weight increased by {increase}.")
+
         else:
-            # Subsequent activations this deadline: add 90% of last increase
+            # Subsequent activations this round: 90% of last increase
             increase = d['last_increase'] * 0.9
             active_bonuses[target_cls] = active_bonuses[target_cls] + increase
             d['last_increase'] = increase
-            target_name = target_cls.__name__
-            print(f"Activated {d['charm'].name}! {target_name} weight increased by {increase:.1f}.")
-        
+            print(f"{charm.name} activated again! {target_name} weight increased by {increase:.1f}.")
+
         d['activations_this_round'] += 1
         d['uses'] += 1
         d['cooldown'] = 3
@@ -1054,83 +1044,62 @@ class DeadlineSystem:
       - Round 1/3: Can skip
       - Round 2/3: Can skip
       - Round 3/3: MANDATORY - cannot skip
-    
-    Deadline amounts increase by 300% (4x) each deadline:
-      - Deadline 1: $100 per round
-      - Deadline 2: $400 per round
-      - Deadline 3: $1,600 per round
-      - And so on...
-    
-    Rules:
-    - Skip rounds 1 & 2 to accumulate debt
-    - Round 3 must be paid or game ends
-    - After completing deadline N round 3, move to deadline N+1 round 1
+
+    Deadline amounts increase by 300% (4x) each deadline.
     """
-    
+
     def __init__(self):
-        self.current_deadline = 1  # Deadline number (1, 2, 3, ...)
-        self.current_round = 1     # Round within deadline (1, 2, or 3)
-        self.completed_rounds = []  # List of (deadline, round) tuples
-        self.skipped_rounds = []    # List of (deadline, round) tuples
+        self.current_deadline = 1
+        self.current_round = 1
+        self.completed_rounds = []
+        self.skipped_rounds = []
         self.accumulated_debt = 0
-    
+
     def get_deadline_amount(self, deadline_num):
-        """Calculate the cost for a given deadline: 100 * 4^(deadline-1)."""
         return int(100 * (4 ** (deadline_num - 1)))
-    
+
     def get_current_deadline_amount(self):
-        """Get the amount for the current deadline."""
         return self.get_deadline_amount(self.current_deadline)
-    
+
     def get_current_total(self):
-        """Get current amount + accumulated debt."""
         return self.get_current_deadline_amount() + self.accumulated_debt
-    
+
     def get_breakdown(self):
-        """Get breakdown of current vs accumulated debt."""
         current = self.get_current_deadline_amount()
         return {"current_round": current, "accumulated_debt": self.accumulated_debt, "total": self.get_current_total()}
-    
+
     def can_skip(self):
-        """Can skip if not round 3/3."""
         return self.current_round < 3
-    
+
     def pay_deadline(self):
-        """Mark current round as paid and move to next."""
         self.completed_rounds.append((self.current_deadline, self.current_round))
         self.accumulated_debt = 0
-        
+
         if self.current_round == 3:
-            # Move to next deadline
             self.current_deadline += 1
             self.current_round = 1
         else:
-            # Move to next round in same deadline
             self.current_round += 1
-    
+
     def skip_deadline(self):
-        """Skip current round (adds to debt) and move to next."""
         if not self.can_skip():
             return False
-        
+
         self.skipped_rounds.append((self.current_deadline, self.current_round))
         self.accumulated_debt += self.get_current_deadline_amount()
-        
+
         if self.current_round == 3:
-            # Move to next deadline
             self.current_deadline += 1
             self.current_round = 1
         else:
-            # Move to next round in same deadline
             self.current_round += 1
-        
+
         return True
-    
+
     def display_status(self):
-        """Display current deadline status."""
         breakdown = self.get_breakdown()
         cannotskip = " (MANDATORY)" if not self.can_skip() else ""
-        
+
         print(f"\n{'='*50}")
         print(f"DEADLINE {self.current_deadline}, ROUND {self.current_round}/3{cannotskip}")
         print(f"{'='*50}")
@@ -1139,35 +1108,6 @@ class DeadlineSystem:
             print(f"Accumulated Debt:      ${breakdown['accumulated_debt']:,}")
         print(f"Total Payment Due:     ${breakdown['total']:,}")
         print(f"{'='*50}\n")
-    
-    def get_progress(self):
-        """Get a summary of completed and upcoming deadlines."""
-        print("\n" + "="*50)
-        print("DEADLINE PROGRESS")
-        print("="*50)
-        
-        # Show completed and skipped rounds
-        if self.completed_rounds or self.skipped_rounds:
-            all_processed = sorted(self.completed_rounds + self.skipped_rounds)
-            for deadline_num, round_num in all_processed:
-                amount = self.get_deadline_amount(deadline_num)
-                status = ""
-                if (deadline_num, round_num) in self.completed_rounds:
-                    status = "✓ Completed"
-                elif (deadline_num, round_num) in self.skipped_rounds:
-                    status = "⏭ Skipped (Owed)"
-                print(f"Deadline {deadline_num}, Round {round_num}/3: ${amount:,} - {status}")
-        
-        # Show current round
-        current_amount = self.get_current_deadline_amount()
-        print(f"Deadline {self.current_deadline}, Round {self.current_round}/3: ${current_amount:,} - ⏳ Current")
-        
-        # Calculate total paid
-        total_paid = sum(self.get_deadline_amount(d) for d, r in self.completed_rounds)
-        print(f"\nTotal Paid: ${total_paid:,}")
-        if self.accumulated_debt > 0:
-            print(f"Outstanding Debt: ${self.accumulated_debt:,}")
-        print("="*50 + "\n")
 
 
 # ============================================================
@@ -1183,17 +1123,13 @@ def main():
     owned_charms = []
     active_bonuses = {}
     deadlines = DeadlineSystem()
- 
+
     board = Board(3, 5)
-    
-    # Display initial deadline
+
     deadlines.display_status()
 
     while money > 0:
-        # Compute max spins with charms
         max_spins = compute_effective_max_spins(BASE_MAX_SPINS, owned_charms)
-
-        # Ask user for spin amount
         choice = get_spin_amount(money, max_spins)
 
         if choice == "q":
@@ -1211,16 +1147,13 @@ def main():
         spins = choice
         money -= spins
 
-        # Update cooldowns and reset round activation counters at start of round
+        # Update cooldowns and reset round activation counters
         for d in owned_charms:
             if d['cooldown'] > 0:
                 d['cooldown'] -= 1
             d['activations_this_round'] = 0
 
-        # Weight overrides from active bonuses
         weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses)
-
-        # Reset grand total for this round
         board.grand_total = 0
 
         # Perform spins
@@ -1228,11 +1161,9 @@ def main():
             print(f"\n--- SPIN {i+1} ---")
             board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms)
             board.display_total(owned_charms)
-            
-            # Allow charm activation after each spin
+
+            # Auto‑activate charms after each spin
             charm_phase(owned_charms, active_bonuses, BASE_SYMBOL_CLASSES)
-            
-            # Recalculate weights after charm activation
             weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses)
 
         # Round summary
@@ -1242,35 +1173,28 @@ def main():
         print(board.grand_total)
         print()
 
-        # Add winnings
         money += board.grand_total
         print(f"You now have ${money}.\n")
-        
-        # Check if deadline payment is due
+
+        # Deadline handling
         deadlines.display_status()
         deadline_amount = deadlines.get_current_total()
-        breakdown = deadlines.get_breakdown()
+
         while True:
             if money >= deadline_amount:
-                options = []
-                options.append("1. Pay deadline")
-                
+                print("1. Pay deadline")
                 if deadlines.can_skip():
-                    options.append("2. Skip this round (you'll owe it later)")
+                    print("2. Skip this round (you'll owe it later)")
                 else:
-                    options.append("(Round 3 is MANDATORY - cannot skip)")
-                
-                for opt in options:
-                    print(opt)
-                
+                    print("(Round 3 is MANDATORY - cannot skip)")
+
                 choice = input("> ").strip()
-                
+
                 if choice == "1":
                     money -= deadline_amount
                     print(f"Deadline paid! You now have ${money}.")
                     sleep(0.75)
                     deadlines.pay_deadline()
-                    # Reset weight bonuses and charm tracking for the new round
                     active_bonuses = {}
                     for d in owned_charms:
                         if d['charm'].kind == "weight_active":
@@ -1278,14 +1202,14 @@ def main():
                             d['last_increase'] = 0
                     deadlines.display_status()
                     break
+
                 elif choice == "2" and deadlines.can_skip():
                     prev_deadline = deadlines.current_deadline
                     prev_round = deadlines.current_round
                     deadlines.skip_deadline()
                     print(f"Skipped Deadline {prev_deadline}, Round {prev_round}/3!")
-                    print(f"Debt accumulated. You'll owe ${deadlines.accumulated_debt:,} in future rounds.")
+                    print(f"Debt accumulated. You'll owe ${deadlines.accumulated_debt:,}.")
                     sleep(0.75)
-                    # Reset weight bonuses and charm tracking for the new round
                     active_bonuses = {}
                     for d in owned_charms:
                         if d['charm'].kind == "weight_active":
@@ -1293,13 +1217,13 @@ def main():
                             d['last_increase'] = 0
                     deadlines.display_status()
                     break
+
                 else:
                     print("Invalid choice. You must pay or skip.")
-                    
+
             else:
                 print(f"You don't have enough money to pay (need ${deadline_amount:,}, have ${money})")
                 if deadlines.can_skip():
-                    print("Would you like to skip this round and owe the debt?")
                     choice = input("Skip? (y/n) > ").strip().lower()
                     if choice == "y":
                         prev_deadline = deadlines.current_deadline
@@ -1308,7 +1232,6 @@ def main():
                         print(f"Skipped Deadline {prev_deadline}, Round {prev_round}/3!")
                         print(f"You now owe ${deadlines.accumulated_debt:,}.")
                         sleep(0.75)
-                        # Reset weight bonuses and charm tracking for the new round
                         active_bonuses = {}
                         for d in owned_charms:
                             if d['charm'].kind == "weight_active":
@@ -1326,8 +1249,6 @@ def main():
                     money = 0
                     break
 
-
-    # End game
     print("\n" + "="*40)
     if money <= 0:
         print("You lost all your money. Game over.")
