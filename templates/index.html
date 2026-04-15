@@ -27,6 +27,26 @@
             font-family: monospace;
         }
 
+        /* NEW: Board grid */
+        #board {
+            display: grid;
+            grid-template-columns: repeat(5, 60px);
+            gap: 6px;
+            margin-bottom: 20px;
+        }
+
+        .cell {
+            width: 60px;
+            height: 60px;
+            background: #333;
+            border: 1px solid #666;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 22px;
+            color: #fff;
+        }
+
         .button-row {
             display: flex;
             justify-content: center;
@@ -54,6 +74,9 @@
 <body>
 
 <h1>🎰 Slot Machine Game</h1>
+
+<!-- NEW: Board container -->
+<div id="board"></div>
 
 <div id="terminal"></div>
 
@@ -83,6 +106,7 @@
 
 <script>
 const terminal = document.getElementById('terminal');
+const board = document.getElementById('board');
 let uiMode = "normal";
 
 // Start game
@@ -93,23 +117,32 @@ setInterval(async () => {
     const res = await fetch('/api/get-output');
     const data = await res.json();
 
-    if (data.output) {
-        // Append new output
-        terminal.innerHTML += data.output;
-        terminal.scrollTop = terminal.scrollHeight;
+    if (!data || !data.output) return;
 
-        // --- FINAL FIX: detect ONLY the new output chunk ---
-        const newText = data.output;
+    const text = data.output;
 
-        const deadlinePrompt =
-            newText.includes("1. Pay deadline") ||
-            newText.includes("Would you like to skip this round") ||
-            newText.includes("You don't have enough money to pay");
+    // Detect board block between "=== BOARD ===" and next blank line
+    const boardMatch = text.match(/=== BOARD ===([\s\S]*?)(?:\n\n|\r\n\r\n|$)/);
 
-        if (deadlinePrompt && uiMode !== "deadline") {
-            showDeadlineButtons();
+    if (boardMatch) {
+        const raw = boardMatch[1];
+
+        // Extract numbers (your backend prints 15 numbers)
+        const nums = raw.match(/\d+/g);
+
+        if (nums && nums.length === 15) {
+            board.innerHTML = nums.map(n => `<div class="cell">${n}</div>`).join("");
         }
+
+        // Remove board text from terminal output
+        const cleaned = text.replace(boardMatch[0], "");
+        terminal.innerHTML += cleaned;
+    } else {
+        terminal.innerHTML += text;
     }
+
+    terminal.scrollTop = terminal.scrollHeight;
+
 }, 200);
 
 function sendCommand(cmd) {

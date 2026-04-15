@@ -1,6 +1,6 @@
-# import game function into server, and make it so that you don't need to enter things for the text that is supposed to come out automatically
+# make all inputs into buttons for better clarity and convenience (check)
 # more charms 
-# charm function fix
+# charm function fixes when the game becomes more developsed
 # Change look more
 # abilities bc max deadline with og setup is around 6
 more stuff here
