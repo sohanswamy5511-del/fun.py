@@ -161,4 +161,19 @@ def send_user_input():
     return jsonify({'status': 'error', 'message': 'Empty input'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=False, host='localhost', port=5000)
+    # Allow port reuse even if it's in TIME_WAIT state
+    import socket
+    from werkzeug.serving import make_server
+    
+    # Create server with socket options
+    server = make_server('localhost', 5000, app, threaded=True)
+    
+    # Enable socket reuse
+    server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except (AttributeError, OSError):
+        pass  # SO_REUSEPORT may not be available on all systems
+    
+    print(" * Running on http://localhost:5000")
+    server.serve_forever()

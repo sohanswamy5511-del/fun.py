@@ -1138,7 +1138,7 @@ def main():
 
     board = Board(3, 5)
 
-    deadlines.display_status()
+    # deadlines.display_status()  # Don't show deadline on startup
 
     while money > 0:
         max_spins = compute_effective_max_spins(BASE_MAX_SPINS, owned_charms)
