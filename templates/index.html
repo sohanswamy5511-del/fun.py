@@ -27,7 +27,6 @@
             font-family: monospace;
         }
 
-        /* NEW: Board grid */
         #board {
             display: grid;
             grid-template-columns: repeat(5, 60px);
@@ -75,12 +74,9 @@
 
 <h1>🎰 Slot Machine Game</h1>
 
-<!-- NEW: Board container -->
 <div id="board"></div>
-
 <div id="terminal"></div>
 
-<!-- NORMAL GAMEPLAY BUTTONS -->
 <div id="normal-buttons" class="button-row">
     <button onclick="spinMax()">Spin Max</button>
     <button onclick="spinHalf()">Spin ½ Max</button>
@@ -89,7 +85,6 @@
     <button onclick="sendCommand('q')">Quit</button>
 </div>
 
-<!-- STORE MODE BUTTONS -->
 <div id="store-buttons" class="button-row" style="display:none;">
     <button onclick="storeChoice('1')">1</button>
     <button onclick="storeChoice('2')">2</button>
@@ -98,7 +93,6 @@
     <button onclick="storeChoice('leave')">Leave</button>
 </div>
 
-<!-- DEADLINE BUTTONS -->
 <div id="deadline-buttons" class="button-row" style="display:none;">
     <button onclick="deadlineChoice('1')">1</button>
     <button onclick="deadlineChoice('2')">2</button>
@@ -109,10 +103,8 @@ const terminal = document.getElementById('terminal');
 const board = document.getElementById('board');
 let uiMode = "normal";
 
-// Start game
 fetch('/api/start-game', { method: 'POST' });
 
-// Poll output
 setInterval(async () => {
     const res = await fetch('/api/get-output');
     const data = await res.json();
@@ -121,24 +113,39 @@ setInterval(async () => {
 
     const text = data.output;
 
-    // Detect board block between "=== BOARD ===" and next blank line
+    // BOARD DETECTION
     const boardMatch = text.match(/=== BOARD ===([\s\S]*?)(?:\n\n|\r\n\r\n|$)/);
 
     if (boardMatch) {
         const raw = boardMatch[1];
-
-        // Extract numbers (your backend prints 15 numbers)
         const nums = raw.match(/\d+/g);
 
         if (nums && nums.length === 15) {
             board.innerHTML = nums.map(n => `<div class="cell">${n}</div>`).join("");
         }
 
-        // Remove board text from terminal output
         const cleaned = text.replace(boardMatch[0], "");
         terminal.innerHTML += cleaned;
     } else {
         terminal.innerHTML += text;
+    }
+
+    // ⭐ DEADLINE DETECTION ⭐
+    const chunk = text;
+
+    const deadlineTriggers = [
+        "1. Pay deadline",
+        "2. Skip this round",
+        "You don't have enough money to pay",
+        "Would you like to skip this round"
+    ];
+
+    const isDeadline = deadlineTriggers.some(t => chunk.includes(t));
+
+    if (isDeadline) {
+        showDeadlineButtons();
+    } else if (uiMode === "deadline") {
+        showNormalButtons();
     }
 
     terminal.scrollTop = terminal.scrollHeight;
@@ -153,7 +160,6 @@ function sendCommand(cmd) {
     });
 }
 
-// Money extraction
 function extractMoney() {
     const text = terminal.innerText;
     const matches = [...text.matchAll(/You have \$(\d+)/g)];
@@ -174,7 +180,6 @@ function spinHalf() {
     if (half > 0) sendCommand(String(half));
 }
 
-// UI MODE SWITCHING
 function showNormalButtons() {
     document.getElementById("normal-buttons").style.display = "flex";
     document.getElementById("store-buttons").style.display = "none";
@@ -196,7 +201,6 @@ function showDeadlineButtons() {
     uiMode = "deadline";
 }
 
-// STORE MODE
 function openStore() {
     sendCommand("store");
     showStoreButtons();
@@ -207,12 +211,10 @@ function storeChoice(option) {
     showNormalButtons();
 }
 
-// CHARM MODE
 function openCharm() {
     sendCommand("charm");
 }
 
-// DEADLINE MODE
 function deadlineChoice(option) {
     sendCommand(option);
     showNormalButtons();
@@ -220,4 +222,3 @@ function deadlineChoice(option) {
 </script>
 
 </body>
-</html>
