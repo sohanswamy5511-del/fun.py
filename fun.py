@@ -563,11 +563,20 @@ class Board:
     # PRINT BOARD
     # --------------------------------------------------------
 
-    def print_board(self):
+    def print_board(self, pattern_cells=None):
         print("\n=== BOARD ===")
         for row in self.grid:
             print(" | ".join(f"{s.display_name:12}" for s in row))
-        print("=============\n")
+        print("=============")
+        
+        # Output pattern cells in machine-readable format
+        if pattern_cells:
+            print("PATTERN_CELLS:", end="")
+            for pattern_name, cells in pattern_cells:
+                cells_str = ",".join(f"({x},{y})" for x, y in cells)
+                print(f"[{pattern_name}:{cells_str}]", end="")
+            print()
+        print()
 
     # --------------------------------------------------------
     # SCORING
@@ -612,6 +621,9 @@ class Board:
                 continue
 
             chosen.append((pattern, cells))
+
+        # Store for print output
+        self.last_patterns = chosen
 
         # ----------------------------------------------------
         # RETRIGGER LOGIC
@@ -1161,6 +1173,14 @@ def main():
             print(f"\n--- SPIN {i+1} ---")
             board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms)
             board.display_total(owned_charms)
+            
+            # Print pattern cells for frontend visualization
+            if hasattr(board, 'last_patterns') and board.last_patterns:
+                print("PATTERN_CELLS:", end="")
+                for pattern, cells in board.last_patterns:
+                    cells_str = ",".join(f"({x},{y})" for x, y in cells)
+                    print(f"[{pattern.name}:{cells_str}]", end="")
+                print()
 
             # Auto‑activate charms after each spin
             charm_phase(owned_charms, active_bonuses, BASE_SYMBOL_CLASSES)
