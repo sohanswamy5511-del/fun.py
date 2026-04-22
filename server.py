@@ -160,6 +160,12 @@ def send_user_input():
         return jsonify({'status': 'ok'})
     return jsonify({'status': 'error', 'message': 'Empty input'}), 400
 
+@app.route('/api/quit', methods=['POST'])
+def quit_game():
+    """Quit the game and stop the server."""
+    stop_game()
+    return jsonify({'status': 'ok'})
+
 if __name__ == '__main__':
     # Allow port reuse even if it's in TIME_WAIT state
     import socket
