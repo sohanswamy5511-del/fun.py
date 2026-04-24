@@ -345,34 +345,76 @@ createWall(12, 50, 0.1, 0, 25, -6, 0x0a2a2a);
 // Ceiling
 createWall(12, 0.1, 12, 0, 50.05, 0, 0x1a0a2a);
 
-// SLOT MACHINE - 3D Cabinet with frame
-const machineFrame = createWall(3.5, 4.5, 0.8, 0, 1.8, 3.5, 0x1a1a1a);
-const machineBody = createWall(3, 4, 0.6, 0, 1.8, 4, 0x0a0a2a);
+// SLOT MACHINE - 3D Cabinet on left wall, rotated 180 degrees
+// Machine is now positioned against the left wall (x = -6) and flipped
+const machineFrame = createWall(3.5, 4.5, 0.8, -5.9, 1.8, 0, 0x1a1a1a);
+const machineBody = createWall(3, 4, 0.6, -5.9, 1.8, 0.4, 0x0a0a2a);
 
 // Machine top (roof)
-const machineTop = createWall(3.5, 0.3, 0.8, 0, 4.2, 3.5, 0x2a1a1a);
+const machineTop = createWall(3.5, 0.3, 0.8, -5.9, 4.2, 0, 0x2a1a1a);
 
 // Machine bottom rim
-const machineBottom = createWall(3.5, 0.2, 0.8, 0, -0.1, 3.5, 0x1a1a1a);
+const machineBottom = createWall(3.5, 0.2, 0.8, -5.9, -0.1, 0, 0x1a1a1a);
 
-// Machine sides (for 3D effect)
-const machineLeft = createWall(0.2, 4, 0.8, -1.75, 1.8, 3.5, 0x151515);
-const machineRight = createWall(0.2, 4, 0.8, 1.75, 1.8, 3.5, 0x151515);
+// Machine sides (for 3D effect) - flipped left/right
+const machineLeft = createWall(0.2, 4, 0.8, -7.65, 1.8, 0, 0x151515);
+const machineRight = createWall(0.2, 4, 0.8, -4.05, 1.8, 0, 0x151515);
 
-// Board cells (5x3 grid) - on the machine face
+// Function to create SVG symbol image for board cells
+function createSymbolSVG(symbolName, multiplier) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    
+    // Background
+    ctx.fillStyle = '#0a0a2a';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.strokeStyle = '#00aaff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, 128, 128);
+    
+    // Create symbol representation using emoji as placeholder for SVG
+    const symbolEmojis = {
+        'Coin': '🪙',
+        'Spinner': '🎡',
+        'Dice': '🎲',
+        'Card': '🃏',
+        'Wheel': '🎯'
+    };
+    
+    const emoji = symbolEmojis[symbolName] || '?';
+    ctx.fillStyle = '#00aaff';
+    ctx.font = 'bold 50px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, 64, 45);
+    
+    // Multiplier
+    if (multiplier) {
+        ctx.fillStyle = '#ffff00';
+        ctx.font = 'bold 24px Arial';
+        ctx.fillText('x' + multiplier, 64, 85);
+    }
+    
+    return new THREE.CanvasTexture(canvas);
+}
+
+// Board cells (5x3 grid) - on the machine face, now on left wall, flipped
 const boardCells = [];
 const cellSize = 0.35;
-const boardStartX = -0.75;
+const boardStartX = -5.95;
 const boardStartY = 2.5;
-const boardStartZ = 4.3;
+const boardStartZ = -0.75;
+let boardCellsVisible = false;
 
 for (let row = 0; row < 3; row++) {
     for (let col = 0; col < 5; col++) {
-        const x = boardStartX + col * (cellSize + 0.08);
+        const x = boardStartX;
         const y = boardStartY - row * (cellSize + 0.08);
-        const z = boardStartZ;
+        const z = boardStartZ + (4 - col) * (cellSize + 0.08); // Flipped: 4-col for 180 degree rotation
         
-        const cellGeom = new THREE.BoxGeometry(cellSize, cellSize, 0.05);
+        const cellGeom = new THREE.BoxGeometry(0.05, cellSize, cellSize);
         const cellMat = new THREE.MeshStandardMaterial({
             color: 0x0a0a2a,
             emissive: 0x00aaff,
@@ -382,6 +424,7 @@ for (let row = 0; row < 3; row++) {
         cell.position.set(x, y, z);
         cell.castShadow = true;
         cell.receiveShadow = true;
+        cell.visible = boardCellsVisible; // Initially hidden
         scene.add(cell);
         
         boardCells.push({
@@ -447,6 +490,35 @@ for (let i = 0; i < 4; i++) {
         label: i + 1
     });
 }
+
+// DEADLINE DISPLAY - on right wall, flat against wall
+const deadlineDisplayBox = createWall(0.1, 2, 1.8, 5.95, 2, 0, 0x1a0a0a);
+const deadlineDisplayMaterial = new THREE.MeshStandardMaterial({
+    color: 0x1a0a00,
+    emissive: 0xff4400,
+    emissiveIntensity: 0.2
+});
+deadlineDisplayBox.material = deadlineDisplayMaterial;
+
+// Create interactive coin insertion button on deadline display
+const coinButtonGeom = new THREE.BoxGeometry(0.05, 0.6, 0.6);
+const coinButtonMat = new THREE.MeshStandardMaterial({
+    color: 0xffaa00,
+    emissive: 0xffaa00,
+    emissiveIntensity: 0.3
+});
+const coinButton = new THREE.Mesh(coinButtonGeom, coinButtonMat);
+coinButton.position.set(5.97, 1.2, 0);
+coinButton.castShadow = true;
+coinButton.receiveShadow = true;
+scene.add(coinButton);
+
+let deadlineDisplayData = {
+    box: deadlineDisplayBox,
+    button: coinButton,
+    amount: 0,
+    isHovering: false
+};
 
 // Request fullscreen immediately on page load
 window.addEventListener('load', () => {
@@ -574,10 +646,6 @@ document.addEventListener('keypress', (e) => {
         } else if (['1', '2', '3', '4'].includes(key)) {
             chooseCharm(key);
         }
-    } else if (uiMode === 'deadline') {
-        if (['1', '2'].includes(key)) {
-            deadlineChoice(key);
-        }
     } else if (uiMode === 'normal') {
         if (key === 'c') {
             e.preventDefault();
@@ -595,8 +663,25 @@ let uiMode = 'normal';
 let currentSpinNum = 1;
 let currentMaxSpins = 8;
 
-// Start game
-fetch('/api/start-game', { method: 'POST' });
+// Raycaster for detecting clicks on 3D objects
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+document.addEventListener('click', (event) => {
+    if (uiMode !== 'normal') return;
+    
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    
+    const intersects = raycaster.intersectObjects([deadlineDisplayData.button]);
+    
+    if (intersects.length > 0) {
+        // Coin button clicked - send payment command
+        sendCommand('deadline_pay');
+    }
+});
 
 // Main polling loop
 setInterval(async () => {
@@ -624,6 +709,70 @@ setInterval(async () => {
     if (maxMatch) {
         currentMaxSpins = parseInt(maxMatch[1]);
         document.getElementById('spin-max').textContent = currentMaxSpins;
+    }
+
+    // Deadline detection - update wall display instead of showing panel
+    const deadlineMatch = text.match(/💀 PAYMENT DUE:\s*\$([0-9,]+)/);
+    
+    if (deadlineMatch) {
+        const amount = deadlineMatch[1];
+        deadlineDisplayData.amount = amount;
+        
+        // Update deadline display texture
+        const textCanvas = document.createElement('canvas');
+        textCanvas.width = 256;
+        textCanvas.height = 256;
+        const ctx = textCanvas.getContext('2d');
+        
+        // Background
+        ctx.fillStyle = '#0a0a00';
+        ctx.fillRect(0, 0, 256, 256);
+        ctx.strokeStyle = '#ff4400';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, 252, 252);
+        
+        // Title
+        ctx.fillStyle = '#ff4400';
+        ctx.font = 'bold 28px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PAYMENT DUE', 128, 40);
+        
+        // Amount
+        ctx.fillStyle = '#ffff00';
+        ctx.font = 'bold 48px Arial';
+        ctx.fillText('$' + amount, 128, 120);
+        
+        // Click coin button instruction
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = '16px Arial';
+        ctx.fillText('INSERT COIN', 128, 200);
+        
+        const texture = new THREE.CanvasTexture(textCanvas);
+        const mat = new THREE.MeshStandardMaterial({
+            map: texture,
+            emissive: 0xff4400,
+            emissiveIntensity: 0.4
+        });
+        deadlineDisplayData.box.material = mat;
+    } else {
+        // No deadline - clear the display
+        const textCanvas = document.createElement('canvas');
+        textCanvas.width = 256;
+        textCanvas.height = 256;
+        const ctx = textCanvas.getContext('2d');
+        ctx.fillStyle = '#0a0a00';
+        ctx.fillRect(0, 0, 256, 256);
+        ctx.strokeStyle = '#444400';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(2, 2, 252, 252);
+        
+        const texture = new THREE.CanvasTexture(textCanvas);
+        const mat = new THREE.MeshStandardMaterial({
+            map: texture,
+            emissive: 0x222200,
+            emissiveIntensity: 0.1
+        });
+        deadlineDisplayData.box.material = mat;
     }
 
     // BOARD parsing
@@ -769,20 +918,6 @@ setInterval(async () => {
     } else if (text.includes("Welcome to the store") === false && uiMode === 'store') {
         uiMode = 'normal';
         hideUI();
-    }
-
-    // Deadline detection - only after first spin
-    if (currentSpinNum > 1) {
-        const deadlineTriggers = ["DEADLINE", "Pay deadline", "Skip this round"];
-        const isDeadline = deadlineTriggers.some(t => text.includes(t));
-        
-        if (isDeadline && uiMode === 'normal') {
-            uiMode = 'deadline';
-            showDeadline(text);
-        } else if (!isDeadline && uiMode === 'deadline') {
-            uiMode = 'normal';
-            hideUI();
-        }
     }
 }, 200);
 
