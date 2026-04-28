@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Slot Machine Game</title>
+    <title>Arcade Game</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         * {
@@ -234,7 +234,8 @@
 <div class="hud">
     <div class="hud-line">BALANCE: <span id="hud-money">$12</span></div>
     <div class="hud-line">---</div>
-    <div class="hud-line" style="font-size: 11px;">MOUSE: Look<br>WASD/S: Move<br>1-8: SPIN<br>C: CHARM<br>Q: QUIT<br>F: FULLSCREEN</div>
+    <div class="hud-line" id="hud-phone"></div>
+    <div class="hud-line" style="font-size: 11px;">MOUSE: Look<br>WASD/S: Move<br>1-8: SPIN<br>C: CHARM<br>B: BUTTON<br>Q: QUIT<br>F: FULLSCREEN</div>
 </div>
 
 <div class="spin-counter">
@@ -269,6 +270,30 @@
             <button class="deadline-btn" onclick="deadlineChoice('2')" style="width: 48%;">2. Skip</button>
         </div>
         <div id="deadline-mandatory" style="display: none; margin-top: 15px; color: #ff0000;">MANDATORY - Cannot Skip</div>
+    </div>
+    
+    <div id="origami-panel" class="ui-panel" style="display: none;">
+        <h2>📄 Origami Typer</h2>
+        <div id="origami-level">Level: 1 - Crane</div>
+        <div id="origami-word">Type: fold</div>
+        <input id="origami-input" type="text" />
+        <div id="origami-timer">Time: 3.0s</div>
+        <div id="origami-combo">Combo: 0</div>
+        <button onclick="submitOrigamiWord()">Submit (Enter)</button>
+        <button onclick="pauseOrigami()">Pause (P)</button>
+        <button onclick="exitOrigami()">Exit to Arcade</button>
+    </div>
+    
+    <div id="achievements-panel" class="ui-panel" style="display: none;">
+        <h2>🏆 Achievements</h2>
+        <div id="achievements-list"></div>
+    </div>
+
+    <div id="phone-panel" class="ui-panel" style="display: none;">
+        <h2>📱 Phone Abilities</h2>
+        <div style="font-size: 14px; margin-bottom: 20px;">Choose a phone ability for this deadline:</div>
+        <div id="phone-abilities-list"></div>
+        <div class="instructions">Select 1-10 or 0 to skip</div>
     </div>
 </div>
 
@@ -311,6 +336,212 @@ spotlight.target.position.set(0, 0, 0);
 scene.add(spotlight);
 scene.add(spotlight.target);
 
+// Origami Typer data
+const wordLists = {
+    easy: ['fold', 'paper', 'square', 'corner', 'edge', 'line', 'shape', 'flat', 'turn', 'bend'],
+    normal: ['origami', 'triangle', 'diagonal', 'symmetry', 'pleat', 'valley', 'mountain', 'base', 'model', 'design'],
+    hard: ['chrysanthemum', 'waterbomb', 'kusudama', 'modular', 'kirigami', 'tessellation', 'polyhedron', 'fractal', 'algorithm', 'recursion'],
+    expert: ['tessellation', 'polyhedron', 'fractal', 'algorithm', 'recursion', 'dimensional', 'geometric', 'mathematical', 'computational', 'recursive']
+};
+
+const origamiLevels = [
+    { name: "Crane", folds: 10, difficulty: 'easy' },
+    { name: "Boat", folds: 12, difficulty: 'easy' },
+    { name: "Frog", folds: 15, difficulty: 'normal' },
+    { name: "Butterfly", folds: 18, difficulty: 'normal' },
+    { name: "Dragon", folds: 20, difficulty: 'hard' },
+    { name: "Phoenix", folds: 22, difficulty: 'hard' },
+    { name: "Unicorn", folds: 25, difficulty: 'expert' },
+    { name: "Griffin", folds: 28, difficulty: 'expert' },
+    { name: "Sphinx", folds: 30, difficulty: 'expert' },
+    { name: "Minotaur", folds: 32, difficulty: 'expert' }
+];
+
+let currentOrigamiLevel = 0;
+let currentFold = 0;
+let combo = 0;
+let timer = 3.0;
+let timerInterval;
+let paused = false;
+let currentWord = '';
+
+function showArcadeMode() {
+    boardCellsVisible = false;
+    boardCells.forEach(cell => cell.mesh.visible = false);
+    uiMode = 'arcade';
+    document.querySelector('.hud-line:nth-child(3)').innerHTML = 'MOUSE: Look<br>WASD: Move<br>CLICK MACHINES<br>CLICK ? BOXES (Store)<br>Q: QUIT<br>F: FULLSCREEN';
+}
+
+function showSlotMode() {
+    uiMode = 'slot';
+    boardCellsVisible = true;
+    boardCells.forEach(cell => cell.mesh.visible = true);
+    document.querySelector('.hud-line:nth-child(3)').innerHTML = 'MOUSE: Look<br>WASD: Move<br>1-8: SPIN<br>C: CHARM<br>B: BUTTON<br>CLICK ? (Store)<br>CLICK BUTTON (Pay)<br>Q: QUIT<br>F: FULLSCREEN';
+}
+
+function showOrigamiMode() {
+    uiMode = 'origami';
+    hideUI();
+    const panel = document.getElementById('origami-panel');
+    panel.style.display = 'block';
+    document.getElementById('ui-overlay').style.display = 'flex';
+    startOrigamiGame();
+    document.getElementById('origami-input').focus();
+}
+
+function startOrigamiGame() {
+    currentOrigamiLevel = 0;
+    currentFold = 0;
+    combo = 0;
+    loadOrigamiWord();
+}
+
+function loadOrigamiWord() {
+    if (currentOrigamiLevel >= origamiLevels.length) {
+        document.getElementById('origami-word').textContent = 'Congratulations! All levels complete!';
+        document.getElementById('origami-input').style.display = 'none';
+        return;
+    }
+    const level = origamiLevels[currentOrigamiLevel];
+    if (currentFold >= level.folds) {
+        currentOrigamiLevel++;
+        currentFold = 0;
+        loadOrigamiWord();
+        return;
+    }
+    const words = wordLists[level.difficulty];
+    currentWord = words[Math.floor(Math.random() * words.length)];
+    document.getElementById('origami-word').textContent = 'Type: ' + currentWord;
+    document.getElementById('origami-input').value = '';
+    timer = level.difficulty === 'easy' ? 3.5 : level.difficulty === 'normal' ? 3.0 : level.difficulty === 'hard' ? 2.0 : 1.0;
+    updateOrigamiUI();
+    startTimer();
+}
+
+function startTimer() {
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        if (paused) return;
+        timer -= 0.1;
+        if (timer <= 0) {
+            clearInterval(timerInterval);
+            wrongWord();
+        }
+        updateOrigamiUI();
+    }, 100);
+}
+
+function submitOrigamiWord() {
+    const input = document.getElementById('origami-input').value.trim();
+    if (input === currentWord) {
+        correctWord();
+    } else {
+        wrongWord();
+    }
+}
+
+function correctWord() {
+    combo++;
+    currentFold++;
+    if (combo >= 5) {
+        currentFold++;
+    }
+    loadOrigamiWord();
+}
+
+function wrongWord() {
+    combo = 0;
+    currentFold = Math.max(0, currentFold - 1);
+    loadOrigamiWord();
+}
+
+function updateOrigamiUI() {
+    const level = origamiLevels[currentOrigamiLevel];
+    document.getElementById('origami-level').textContent = 'Level: ' + (currentOrigamiLevel + 1) + ' - ' + (level ? level.name : 'Complete');
+    document.getElementById('origami-timer').textContent = 'Time: ' + timer.toFixed(1) + 's';
+    document.getElementById('origami-combo').textContent = 'Combo: ' + combo;
+}
+
+function pauseOrigami() {
+    paused = !paused;
+    if (!paused) {
+        startTimer();
+    } else {
+        clearInterval(timerInterval);
+    }
+}
+
+function exitOrigami() {
+    clearInterval(timerInterval);
+    uiMode = 'arcade';
+    hideUI();
+    showArcadeMode();
+}
+
+function showPhone(message) {
+    document.getElementById('hud-phone').textContent = 'PHONE: ' + message;
+    setTimeout(() => document.getElementById('hud-phone').textContent = '', 5000);
+}
+
+function showPhoneAbilities(text) {
+    uiMode = 'phone';
+    hideUI();
+    const panel = document.getElementById('phone-panel');
+    const list = document.getElementById('phone-abilities-list');
+    
+    // Extract abilities from text
+    const abilities = [];
+    const lines = text.split('\n');
+    for (let line of lines) {
+        const match = line.match(/^\s*(\d+)\.\s*(.+?)\s*\[(.+?)\]/);
+        if (match) {
+            abilities.push({
+                num: match[1],
+                name: match[2],
+                rarity: match[3]
+            });
+        }
+    }
+    
+    list.innerHTML = abilities.map(a => `
+        <div class="charm-item" onclick="selectPhoneAbility('${a.num}')">
+            <div>${a.num}</div>
+            <div style="font-size: 12px;">${a.name}</div>
+            <div style="font-size: 11px; color: #ffaa00;">${a.rarity}</div>
+        </div>
+    `).join('');
+    
+    panel.style.display = 'block';
+    document.getElementById('ui-overlay').style.display = 'flex';
+}
+
+function selectPhoneAbility(num) {
+    sendCommand(num);
+    uiMode = 'slot';
+    hideUI();
+}
+
+function addAchievement(name) {
+    const list = document.getElementById('achievements-list');
+    if (!list.innerHTML.includes(name)) {
+        list.innerHTML += '<div>' + name + '</div>';
+    }
+    const panel = document.getElementById('achievements-panel');
+    panel.style.display = 'block';
+    document.getElementById('ui-overlay').style.display = 'flex';
+    setTimeout(() => {
+        panel.style.display = 'none';
+        document.getElementById('ui-overlay').style.display = 'none';
+    }, 3000);
+}
+
+function showWin(message) {
+    const panel = document.getElementById('achievements-panel');
+    panel.innerHTML = '<h2>🎉 WIN!</h2><div>' + message + '</div>';
+    panel.style.display = 'block';
+    document.getElementById('ui-overlay').style.display = 'flex';
+}
+
 // ROOM: 12 wide x 12 deep x 50 tall
 // Walls are at boundaries: x: -6 to 6, z: -6 to 6, y: 0 to 50
 
@@ -345,20 +576,25 @@ createWall(12, 50, 0.1, 0, 25, -6, 0x0a2a2a);
 // Ceiling
 createWall(12, 0.1, 12, 0, 50.05, 0, 0x1a0a2a);
 
-// SLOT MACHINE - 3D Cabinet on left wall, rotated 180 degrees
-// Machine is now positioned against the left wall (x = -6) and flipped
-const machineFrame = createWall(3.5, 4.5, 0.8, -5.9, 1.8, 0, 0x1a1a1a);
-const machineBody = createWall(3, 4, 0.6, -5.9, 1.8, 0.4, 0x0a0a2a);
+// SLOT MACHINE - 3D Cabinet on back wall (center left)
+const machineFrame = createWall(3.5, 4.5, 0.8, -3, 1.8, -5.9, 0x1a1a1a);
+const machineBody = createWall(3, 4, 0.6, -3, 1.8, -5.85, 0x0a0a2a);
 
 // Machine top (roof)
-const machineTop = createWall(3.5, 0.3, 0.8, -5.9, 4.2, 0, 0x2a1a1a);
+const machineTop = createWall(3.5, 0.3, 0.8, -3, 4.2, -5.9, 0x2a1a1a);
 
 // Machine bottom rim
-const machineBottom = createWall(3.5, 0.2, 0.8, -5.9, -0.1, 0, 0x1a1a1a);
+const machineBottom = createWall(3.5, 0.2, 0.8, -3, -0.1, -5.9, 0x1a1a1a);
 
-// Machine sides (for 3D effect) - flipped left/right
-const machineLeft = createWall(0.2, 4, 0.8, -7.65, 1.8, 0, 0x151515);
-const machineRight = createWall(0.2, 4, 0.8, -4.05, 1.8, 0, 0x151515);
+// Machine sides (for 3D effect)
+const machineLeft = createWall(0.2, 4, 0.8, -4.75, 1.8, -5.9, 0x151515);
+const machineRight = createWall(0.2, 4, 0.8, -1.25, 1.8, -5.9, 0x151515);
+
+// ORIGAMI TYPER MACHINE - on back wall (right side)
+const origamiMachine = createWall(2, 3, 0.5, 3, 1.5, -5.9, 0x1a2a1a);
+
+// CASHIER SIGN - on back wall (far right)
+const cashierSign = createWall(1.5, 0.8, 0.1, 5.5, 2.5, -5.9, 0x2a2a2a);
 
 // Function to create SVG symbol image for board cells
 function createSymbolSVG(symbolName, multiplier) {
@@ -403,16 +639,16 @@ function createSymbolSVG(symbolName, multiplier) {
 // Board cells (5x3 grid) - on the machine face, now on left wall, flipped
 const boardCells = [];
 const cellSize = 0.35;
-const boardStartX = -5.95;
+const boardStartX = -3;
 const boardStartY = 2.5;
-const boardStartZ = -0.75;
+const boardStartZ = -5.8;
 let boardCellsVisible = false;
 
 for (let row = 0; row < 3; row++) {
     for (let col = 0; col < 5; col++) {
-        const x = boardStartX;
+        const x = boardStartX + (2 - col) * (cellSize + 0.08); // Center columns on machine
         const y = boardStartY - row * (cellSize + 0.08);
-        const z = boardStartZ + (4 - col) * (cellSize + 0.08); // Flipped: 4-col for 180 degree rotation
+        const z = boardStartZ;
         
         const cellGeom = new THREE.BoxGeometry(0.05, cellSize, cellSize);
         const cellMat = new THREE.MeshStandardMaterial({
@@ -487,7 +723,8 @@ for (let i = 0; i < 4; i++) {
     charmBoxes.push({
         mesh: box,
         index: i,
-        label: i + 1
+        label: i + 1,
+        clickable: true
     });
 }
 
@@ -570,14 +807,14 @@ const mouseRotSpeed = 0.005; // radians per pixel
 // Request pointer lock on canvas click
 canvas.addEventListener('click', () => {
     canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
-    if (uiMode === 'normal') {
+    if (uiMode === 'arcade' || uiMode === 'slot') {
         canvas.requestPointerLock();
     }
 });
 
 // Prevent pointer lock from being lost by re-requesting it
 window.addEventListener('mousemove', () => {
-    if (uiMode === 'normal' && !document.pointerLockElement && !document.mozPointerLockElement) {
+    if ((uiMode === 'arcade' || uiMode === 'slot') && !document.pointerLockElement && !document.mozPointerLockElement) {
         canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
         canvas.requestPointerLock();
     }
@@ -587,7 +824,7 @@ window.addEventListener('mousemove', () => {
 document.addEventListener('mousemove', (e) => {
     // Only use movement when in normal gameplay mode and pointer is locked
     const isLocked = document.pointerLockElement === canvas || document.mozPointerLockElement === canvas;
-    if (uiMode === 'normal' && isLocked) {
+    if ((uiMode === 'arcade' || uiMode === 'slot') && isLocked) {
         mouseSpeedX = e.movementX * mouseRotSpeed;
         mouseSpeedY = e.movementY * mouseRotSpeed;
     }
@@ -628,10 +865,14 @@ document.addEventListener('keyup', (e) => {
     if (key === 'a') keys.a = false;
     if (key === 's') keys.s = false;
     if (key === 'd') keys.d = false;
-    if (key === 'escape' && uiMode === 'store') {
-        sendCommand('');
-        uiMode = 'normal';
-        hideUI();
+    if (key === 'escape') {
+        if (uiMode === 'store') {
+            sendCommand('');
+            uiMode = 'slot';
+            hideUI();
+        } else if (uiMode === 'slot') {
+            showArcadeMode();
+        }
     }
 });
 
@@ -641,25 +882,41 @@ document.addEventListener('keypress', (e) => {
     if (uiMode === 'store') {
         if (key === '0') {
             sendCommand('');
-            uiMode = 'normal';
+            uiMode = 'slot';
             hideUI();
         } else if (['1', '2', '3', '4'].includes(key)) {
             chooseCharm(key);
         }
-    } else if (uiMode === 'normal') {
+    } else if (uiMode === 'phone') {
+        if (key === '0') {
+            selectPhoneAbility('0');
+        } else if (['1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(key)) {
+            selectPhoneAbility(key);
+        }
+    } else if (uiMode === 'slot') {
         if (key === 'c') {
             e.preventDefault();
             sendCommand('charm');
+        } else if (key === 'b') {
+            e.preventDefault();
+            sendCommand('button');
         } else if (key === 'q') {
             e.preventDefault();
             showQuitMenu();
         } else if (['1', '2', '3', '4', '5', '6', '7', '8'].includes(key)) {
             sendCommand(key);
         }
+    } else if (uiMode === 'origami') {
+        if (e.key === 'Enter') {
+            submitOrigamiWord();
+        } else if (e.key === 'p' || e.key === 'P') {
+            pauseOrigami();
+        }
     }
 });
 
-let uiMode = 'normal';
+let uiMode = 'arcade';
+showArcadeMode();
 let currentSpinNum = 1;
 let currentMaxSpins = 8;
 
@@ -668,23 +925,57 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 document.addEventListener('click', (event) => {
-    if (uiMode !== 'normal') return;
+    if (uiMode !== 'arcade' && uiMode !== 'slot') return;
     
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     
     raycaster.setFromCamera(mouse, camera);
     
-    const intersects = raycaster.intersectObjects([deadlineDisplayData.button]);
+    // Build list of clickable objects
+    const clickableObjects = [deadlineDisplayData.button, machineFrame, machineBody, machineTop, machineLeft, machineRight, origamiMachine];
+    charmBoxes.forEach(box => clickableObjects.push(box.mesh));
+    
+    const intersects = raycaster.intersectObjects(clickableObjects);
     
     if (intersects.length > 0) {
-        // Coin button clicked - send payment command
-        sendCommand('deadline_pay');
+        const obj = intersects[0].object;
+        
+        // Check if it's a charm box
+        let isCharmBox = false;
+        for (let box of charmBoxes) {
+            if (obj === box.mesh) {
+                if (uiMode === 'slot') {
+                    sendCommand('store');
+                } else if (uiMode === 'arcade') {
+                    showSlotMode();
+                }
+                isCharmBox = true;
+                break;
+            }
+        }
+        
+        if (!isCharmBox) {
+            if (obj === deadlineDisplayData.button) {
+                if (uiMode === 'slot') {
+                    sendCommand('deadline_pay');
+                }
+            } else if (obj === machineFrame || obj === machineBody || obj === machineTop || obj === machineLeft || obj === machineRight) {
+                if (uiMode === 'arcade') {
+                    showSlotMode();
+                }
+            } else if (obj === origamiMachine) {
+                if (uiMode === 'arcade') {
+                    showOrigamiMode();
+                }
+            }
+        }
     }
 });
 
 // Main polling loop
 setInterval(async () => {
+    if (uiMode !== 'slot') return;
     const res = await fetch('/api/get-output');
     const data = await res.json();
     if (!data || !data.output) return;
@@ -912,12 +1203,29 @@ setInterval(async () => {
     }
 
     // Store detection
-    if (text.includes("Welcome to the store") && uiMode === 'normal') {
+    if (text.includes("Welcome to the store") && uiMode === 'slot') {
         uiMode = 'store';
         showStore(text);
     } else if (text.includes("Welcome to the store") === false && uiMode === 'store') {
-        uiMode = 'normal';
+        uiMode = 'slot';
         hideUI();
+    }
+
+    // Phone abilities detection
+    if (text.includes("PHONE ABILITIES - Choose one:")) {
+        showPhoneAbilities(text);
+    }
+
+    // Achievement detection
+    const achievementMatch = text.match(/ACHIEVEMENT: (.+)/);
+    if (achievementMatch) {
+        addAchievement(achievementMatch[1]);
+    }
+
+    // Win detection
+    const winMatch = text.match(/WIN: (.+)/);
+    if (winMatch) {
+        showWin(winMatch[1]);
     }
 }, 200);
 
@@ -1087,7 +1395,7 @@ function animate() {
     requestAnimationFrame(animate);
     
     // Only update camera when in normal gameplay mode
-    if (uiMode === 'normal') {
+    if (uiMode === 'arcade' || uiMode === 'slot') {
         // Update camera rotation based on relative mouse movement
         camera.rotation.order = 'YXZ';
         camera.rotation.y += mouseSpeedX;

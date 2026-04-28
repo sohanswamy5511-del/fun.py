@@ -1,6 +1,80 @@
 import random
 from time import sleep
 
+# Phone and Achievement system
+PHONE_UPGRADE_LEVEL = 0
+ACHIEVEMENTS = set()
+CURRENT_PHONE_ABILITY = None
+
+PHONE_ABILITIES = [
+    {"num": 1, "name": "Increase value of patterns by base value", "rarity": "common", "desc": "All patterns gain their base value"},
+    {"num": 2, "name": "Double values of certain symbols", "rarity": "common", "desc": "Randomly double one symbol type"},
+    {"num": 3, "name": "Restore charges on cooldown charms", "rarity": "common", "desc": "Reset all charm cooldowns"},
+    {"num": 4, "name": "+1 manifestation for a symbol", "rarity": "uncommon", "desc": "Add 1 extra spawn of a symbol"},
+    {"num": 5, "name": "Add a random trait to a charm", "rarity": "uncommon", "desc": "Enhance a charm with a trait"},
+    {"num": 6, "name": "+1 charm space", "rarity": "uncommon", "desc": "Gain an extra charm slot"},
+    {"num": 7, "name": "Remove mult options of a symbol", "rarity": "rare", "desc": "Simplify a symbol's multipliers"},
+    {"num": 8, "name": "Increase Max mult of a symbol by 2", "rarity": "rare", "desc": "Higher multipliers for one symbol"},
+    {"num": 9, "name": "Double Heads mult of coin", "rarity": "legendary", "desc": "Coin Heads becomes 10x instead of 5x"},
+    {"num": 10, "name": "All patterns trigger one more time", "rarity": "legendary", "desc": "Every pattern gets +1 trigger"},
+]
+
+def show_phone_abilities():
+    """Display available phone abilities for the player to choose from."""
+    global CURRENT_PHONE_ABILITY
+    
+    print("\n" + "="*50)
+    print("📞 PHONE ABILITIES - Choose one:")
+    print("="*50)
+    
+    for ability in PHONE_ABILITIES:
+        print(f"{ability['num']}. {ability['name']} [{ability['rarity'].upper()}]")
+        print(f"   {ability['desc']}")
+    
+    print("\nEnter the number of the ability to select, or 0 to skip:")
+    
+    while True:
+        choice = input("> ").strip()
+        
+        if choice == "0":
+            print("No ability selected.")
+            CURRENT_PHONE_ABILITY = None
+            break
+        
+        if not choice.isdigit():
+            print("Invalid choice. Please enter a number.")
+            continue
+        
+        choice_num = int(choice)
+        
+        if choice_num < 0 or choice_num > len(PHONE_ABILITIES):
+            print(f"Invalid choice. Please enter 0-{len(PHONE_ABILITIES)}.")
+            continue
+        
+        if choice_num == 0:
+            print("No ability selected.")
+            CURRENT_PHONE_ABILITY = None
+            break
+        
+        selected = PHONE_ABILITIES[choice_num - 1]
+        CURRENT_PHONE_ABILITY = selected
+        print(f"✅ Selected: {selected['name']}")
+        break
+    
+    print()
+
+def trigger_button():
+    """Activate the current phone ability."""
+    if CURRENT_PHONE_ABILITY:
+        print(f"📞 PHONE ABILITY TRIGGERED: {CURRENT_PHONE_ABILITY['name']}")
+    else:
+        print("No phone ability selected.")
+
+def add_achievement(name):
+    if name not in ACHIEVEMENTS:
+        ACHIEVEMENTS.add(name)
+        print(f"ACHIEVEMENT: {name}")
+
 # ============================================================
 # SYMBOL BASE CLASS
 # ============================================================
@@ -24,6 +98,7 @@ class Symbol:
         self.current_value = current_value if current_value is not None else base_value
         self.display_name = name
         self.is_golden = False
+        self.modifiers = []
 
     def apply_golden_modifier(self):
         """
@@ -153,10 +228,24 @@ class Wheel(Symbol):
 
 
 # ============================================================
+# SEVEN (for 777)
+# ============================================================
+
+class Seven(Symbol):
+    weight = 1
+
+    def __init__(self):
+        super().__init__("Seven", base_value=777)
+
+    def activate(self):
+        pass
+
+
+# ============================================================
 # LIST OF ALL SYMBOL TYPES
 # ============================================================
 
-BASE_SYMBOL_CLASSES = [Dice, Coin, Spinner, Card, Wheel]
+BASE_SYMBOL_CLASSES = [Dice, Coin, Spinner, Card, Wheel, Seven]
 
 # ============================================================
 # PATTERN BASE CLASS
@@ -604,6 +693,10 @@ class Board:
 
         # Sort by size (largest first)
         all_matches.sort(key=lambda x: -len(x[1]))
+
+        # Check for achievements
+        if any(pattern.name == "Jackpot" for pattern, _ in all_matches):
+            add_achievement("Score a Jackpot")
 
         # ----------------------------------------------------
         # SELECT MATCHES
@@ -1094,6 +1187,10 @@ class DeadlineSystem:
         self.current_deadline += 1
         self.rounds_left = 3
         self.payments_made += 1
+    
+    def can_choose_phone_ability(self):
+        """Check if the player can choose a phone ability (deadline 2 or higher)."""
+        return self.current_deadline >= 2
 
 
 # ============================================================
@@ -1150,6 +1247,10 @@ def main():
                 print(f"Insufficient funds. Need ${deadline_amount:,}, have ${money}.")
             continue
 
+        if choice == "button":
+            trigger_button()
+            continue
+
         spins = choice
         money -= spins
 
@@ -1189,6 +1290,11 @@ def main():
         money += board.grand_total
         print(f"You now have ${money}.\n")
 
+        # Win condition
+        if money >= 1000000:
+            print("WIN: You have reached $1,000,000! You can now craft the Grabber charm to continue playing.")
+            add_achievement("Reach 1 Million")
+
         # Deadline display and check
         print(deadlines.get_status_string())
         
@@ -1219,6 +1325,11 @@ def main():
                             d['activations_this_round'] = 0
                             d['last_increase'] = 0
                     print(f"\nNew deadline: {deadlines.get_status_string()}")
+                    
+                    # Show phone ability selection for deadline 2 and onwards
+                    if deadlines.can_choose_phone_ability():
+                        show_phone_abilities()
+                    
                     break
                 else:
                     print("Invalid input. Type 'deadline_pay' or '1' to pay the deadline.")
