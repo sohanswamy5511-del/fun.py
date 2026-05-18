@@ -732,7 +732,9 @@ class Board:
           - Apply golden modifier
           - Apply retrigger logic
           - Add delayed bonuses
+        Returns the number of patterns scored this spin (stored as instance variable).
         """
+        self.patterns_scored_this_spin = 0  # Initialize counter
 
         total = 0
         all_matches = []
@@ -863,6 +865,7 @@ class Board:
         print("=========================\n")
 
         self.grand_total += total
+        self.patterns_scored_this_spin = patterns_this_spin  # Store pattern count
         return total
 
 
@@ -1039,9 +1042,9 @@ ImBadAtMath = Charm(
     rarity="rare"
 )
 
-ScoreXPatterns = Charm(
+Score5Patterns = Charm(
     "Pattern Doubler",
-    "When you score X patterns, double all symbol values until end of round",
+    "When you score 5 patterns, double all symbol values until end of round",
     kind="conditional_mult",
     rarity="rare"
 )
@@ -1075,18 +1078,18 @@ PatternsMultScaling = Charm(
     rarity="rare"
 )
 
-ExtraSymbolTrigger = Charm(
-    "Extra Trigger",
-    "Every symbol except Coin triggers one more time (cooldown 4)",
-    kind="symbol_retrigger",
+NO_CHANGE = Charm(
+    "NOCHANGE",
+    "Patterns containing symbols other than Coin trigger one more time (cooldown 4)",
+    kind="pattern_retrigger_non_coin",
     cooldown_rounds=4,
     rarity="rare"
 )
 
 CoinExtraTrigger = Charm(
     "Coin Rush",
-    "Coin triggers two more times (cooldown 5)",
-    kind="coin_retrigger",
+    "Patterns containing only Coins trigger two more times (cooldown 5)",
+    kind="pattern_retrigger_coin",
     cooldown_rounds=5,
     rarity="rare"
 )
@@ -1275,6 +1278,7 @@ EssenceOfGods = Charm(
     rarity="exotic"
 )
 
+
 THEWORLDENDER = Charm(
     "THE WORLD ENDER",
     "20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x, 777 gain [x^2]x. X increases ^0.2 per jackpot. Spawn 777 next spin. +1 charm space permanently",
@@ -1354,9 +1358,9 @@ ALL_CHARMS = [
     
     # Rare
     ImBadAtMath,
-    ScoreXPatterns, NoPatternBoost,
+    Score5Patterns, NoPatternBoost,
     EarningsMultUp, SymbolsMultUp, PatternsMultScaling,
-    ExtraSymbolTrigger, CoinExtraTrigger,
+    NO_CHANGE, CoinExtraTrigger,
     
     # Legendary
     CCHARM, ProtestingCall,
@@ -1765,20 +1769,38 @@ def main():
 
         weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses)
         board.grand_total = 0
+        patterns_scored_this_round = 0  # Track total patterns for conditional charms
 
         # Perform spins
         for i in range(spins):
             print(f"\n--- SPIN {i+1} ---")
             board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms)
             board.display_total(owned_charms)
+            patterns_scored_this_round += board.patterns_scored_this_spin
+
             
-            # Print pattern cells for frontend visualization
-            if hasattr(board, 'last_patterns') and board.last_patterns:
-                print("PATTERN_CELLS:", end="")
-                for pattern, cells in board.last_patterns:
-                    cells_str = ",".join(f"({x},{y})" for x, y in cells)
-                    print(f"[{pattern.name}:{cells_str}]", end="")
-                print()
+            if spins == 0:
+                pass
+            else:
+                print("\n📜 Activate charms? (type 'charm' to activate, or press Enter to skip)")
+                charm_input = input("> ").strip().lower()
+                if charm_input == "charm":
+                    charm_phase(owned_charms, active_bonuses, BASE_SYMBOL_CLASSES)
+            
+            # Check and trigger conditional charms based on patterns this spin
+            patterns_this_spin = board.patterns_scored_this_spin
+            
+            # WorldRecordPepper: 15+ patterns = double symbol values
+            if patterns_this_spin >= 15 and has_charm(owned_charms, "World Record Pepper"):
+                print("🌶️ WORLD RECORD PEPPER TRIGGERED! All symbols doubled until end of round!")
+            
+            # GiantPeach: 30+ patterns = double patterns and symbols
+            if patterns_this_spin >= 30 and has_charm(owned_charms, "Giant Peach"):
+                print("🍑 GIANT PEACH TRIGGERED! All patterns and symbols doubled until end of round!")
+            
+            # LargestTomato: 50+ patterns = exponential doubling
+            if patterns_this_spin >= 50 and has_charm(owned_charms, "The Largest Tomato Ever"):
+                print("🍅 THE LARGEST TOMATO EVER TRIGGERED! Values multiplying exponentially!")
 
         # Decrement round after all spins are completed
         deadlines.decrement_round()
