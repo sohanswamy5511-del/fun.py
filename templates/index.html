@@ -272,18 +272,6 @@
         <div id="deadline-mandatory" style="display: none; margin-top: 15px; color: #ff0000;">MANDATORY - Cannot Skip</div>
     </div>
     
-    <div id="origami-panel" class="ui-panel" style="display: none;">
-        <h2>📄 Origami Typer</h2>
-        <div id="origami-level">Level: 1 - Crane</div>
-        <div id="origami-word">Type: fold</div>
-        <input id="origami-input" type="text" />
-        <div id="origami-timer">Time: 3.0s</div>
-        <div id="origami-combo">Combo: 0</div>
-        <button onclick="submitOrigamiWord()">Submit (Enter)</button>
-        <button onclick="pauseOrigami()">Pause (P)</button>
-        <button onclick="exitOrigami()">Exit to Arcade</button>
-    </div>
-    
     <div id="achievements-panel" class="ui-panel" style="display: none;">
         <h2>🏆 Achievements</h2>
         <div id="achievements-list"></div>
@@ -336,146 +324,11 @@ spotlight.target.position.set(0, 0, 0);
 scene.add(spotlight);
 scene.add(spotlight.target);
 
-// Origami Typer data
-const wordLists = {
-    easy: ['fold', 'paper', 'square', 'corner', 'edge', 'line', 'shape', 'flat', 'turn', 'bend'],
-    normal: ['origami', 'triangle', 'diagonal', 'symmetry', 'pleat', 'valley', 'mountain', 'base', 'model', 'design'],
-    hard: ['chrysanthemum', 'waterbomb', 'kusudama', 'modular', 'kirigami', 'tessellation', 'polyhedron', 'fractal', 'algorithm', 'recursion'],
-    expert: ['tessellation', 'polyhedron', 'fractal', 'algorithm', 'recursion', 'dimensional', 'geometric', 'mathematical', 'computational', 'recursive']
-};
-
-const origamiLevels = [
-    { name: "Crane", folds: 10, difficulty: 'easy' },
-    { name: "Boat", folds: 12, difficulty: 'easy' },
-    { name: "Frog", folds: 15, difficulty: 'normal' },
-    { name: "Butterfly", folds: 18, difficulty: 'normal' },
-    { name: "Dragon", folds: 20, difficulty: 'hard' },
-    { name: "Phoenix", folds: 22, difficulty: 'hard' },
-    { name: "Unicorn", folds: 25, difficulty: 'expert' },
-    { name: "Griffin", folds: 28, difficulty: 'expert' },
-    { name: "Sphinx", folds: 30, difficulty: 'expert' },
-    { name: "Minotaur", folds: 32, difficulty: 'expert' }
-];
-
-let currentOrigamiLevel = 0;
-let currentFold = 0;
-let combo = 0;
-let timer = 3.0;
-let timerInterval;
-let paused = false;
-let currentWord = '';
-
-function showArcadeMode() {
-    boardCellsVisible = false;
-    boardCells.forEach(cell => cell.mesh.visible = false);
-    uiMode = 'arcade';
-    document.querySelector('.hud-line:nth-child(3)').innerHTML = 'MOUSE: Look<br>WASD: Move<br>CLICK MACHINES<br>CLICK ? BOXES (Store)<br>Q: QUIT<br>F: FULLSCREEN';
-}
-
 function showSlotMode() {
     uiMode = 'slot';
     boardCellsVisible = true;
     boardCells.forEach(cell => cell.mesh.visible = true);
     document.querySelector('.hud-line:nth-child(3)').innerHTML = 'MOUSE: Look<br>WASD: Move<br>1-8: SPIN<br>C: CHARM<br>B: BUTTON<br>CLICK ? (Store)<br>CLICK BUTTON (Pay)<br>Q: QUIT<br>F: FULLSCREEN';
-}
-
-function showOrigamiMode() {
-    uiMode = 'origami';
-    hideUI();
-    const panel = document.getElementById('origami-panel');
-    panel.style.display = 'block';
-    document.getElementById('ui-overlay').style.display = 'flex';
-    startOrigamiGame();
-    document.getElementById('origami-input').focus();
-}
-
-function startOrigamiGame() {
-    currentOrigamiLevel = 0;
-    currentFold = 0;
-    combo = 0;
-    loadOrigamiWord();
-}
-
-function loadOrigamiWord() {
-    if (currentOrigamiLevel >= origamiLevels.length) {
-        document.getElementById('origami-word').textContent = 'Congratulations! All levels complete!';
-        document.getElementById('origami-input').style.display = 'none';
-        return;
-    }
-    const level = origamiLevels[currentOrigamiLevel];
-    if (currentFold >= level.folds) {
-        currentOrigamiLevel++;
-        currentFold = 0;
-        loadOrigamiWord();
-        return;
-    }
-    const words = wordLists[level.difficulty];
-    currentWord = words[Math.floor(Math.random() * words.length)];
-    document.getElementById('origami-word').textContent = 'Type: ' + currentWord;
-    document.getElementById('origami-input').value = '';
-    timer = level.difficulty === 'easy' ? 3.5 : level.difficulty === 'normal' ? 3.0 : level.difficulty === 'hard' ? 2.0 : 1.0;
-    updateOrigamiUI();
-    startTimer();
-}
-
-function startTimer() {
-    clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-        if (paused) return;
-        timer -= 0.1;
-        if (timer <= 0) {
-            clearInterval(timerInterval);
-            wrongWord();
-        }
-        updateOrigamiUI();
-    }, 100);
-}
-
-function submitOrigamiWord() {
-    const input = document.getElementById('origami-input').value.trim();
-    if (input === currentWord) {
-        correctWord();
-    } else {
-        wrongWord();
-    }
-}
-
-function correctWord() {
-    combo++;
-    currentFold++;
-    if (combo >= 5) {
-        currentFold++;
-    }
-    loadOrigamiWord();
-}
-
-function wrongWord() {
-    combo = 0;
-    currentFold = Math.max(0, currentFold - 1);
-    loadOrigamiWord();
-}
-
-function updateOrigamiUI() {
-    const level = origamiLevels[currentOrigamiLevel];
-    document.getElementById('origami-level').textContent = 'Level: ' + (currentOrigamiLevel + 1) + ' - ' + (level ? level.name : 'Complete');
-    document.getElementById('origami-timer').textContent = 'Time: ' + timer.toFixed(1) + 's';
-    document.getElementById('origami-combo').textContent = 'Combo: ' + combo;
-}
-
-function pauseOrigami() {
-    paused = !paused;
-    if (!paused) {
-        startTimer();
-    } else {
-        clearInterval(timerInterval);
-    }
-}
-
-function exitOrigami() {
-    clearInterval(timerInterval);
-    uiMode = 'arcade';
-    hideUI();
-    showArcadeMode();
 }
 
 function showPhone(message) {
@@ -541,9 +394,6 @@ function showWin(message) {
     panel.style.display = 'block';
     document.getElementById('ui-overlay').style.display = 'flex';
 }
-
-// ROOM: 12 wide x 12 deep x 50 tall
-// Walls are at boundaries: x: -6 to 6, z: -6 to 6, y: 0 to 50
 
 const createWall = (width, height, depth, x, y, z, color) => {
     const geometry = new THREE.BoxGeometry(width, height, depth);
