@@ -3,20 +3,56 @@ from time import sleep
 
 # Phone and Achievement system
 PHONE_UPGRADE_LEVEL = 0
-ACHIEVEMENTS = set()
+ACHIEVEMENTS_UNLOCKED = set()
 CURRENT_PHONE_ABILITY = None
 
+# ============================================================
+# PHONE ABILITIES (WITH UPGRADE PROBABILITIES)
+# ============================================================
+# Rarity probabilities change based on phone upgrades
+# Base: Common 50%, Uncommon 30%, Rare 15%, Legendary 5%
+# Upgrade 1: Common 0%, Uncommon 60%, Rare 35%, Legendary 5%
+# Upgrade 2: Common 0%, Uncommon 40%, Rare 50%, Legendary 9%, Exotic 1%
+# Upgrade 3: Common 0%, Uncommon 0%, Rare 0%, Legendary 20%, Exotic 9%, Transcendent 1%
+
 PHONE_ABILITIES = [
+    # COMMON TIER (50% base, 0% with upgrade 1+)
     {"num": 1, "name": "Increase value of patterns by base value", "rarity": "common", "desc": "All patterns gain their base value"},
     {"num": 2, "name": "Double values of certain symbols", "rarity": "common", "desc": "Randomly double one symbol type"},
     {"num": 3, "name": "Restore charges on cooldown charms", "rarity": "common", "desc": "Reset all charm cooldowns"},
+    
+    # UNCOMMON TIER (30% base, 60% upgrade 1, 40% upgrade 2, 0% upgrade 3)
     {"num": 4, "name": "+1 manifestation for a symbol", "rarity": "uncommon", "desc": "Add 1 extra spawn of a symbol"},
     {"num": 5, "name": "Add a random trait to a charm", "rarity": "uncommon", "desc": "Enhance a charm with a trait"},
     {"num": 6, "name": "+1 charm space", "rarity": "uncommon", "desc": "Gain an extra charm slot"},
+    
+    # RARE TIER (15% base, 35% upgrade 1, 50% upgrade 2, 70% upgrade 3)
     {"num": 7, "name": "Remove mult options of a symbol", "rarity": "rare", "desc": "Simplify a symbol's multipliers"},
     {"num": 8, "name": "Increase Max mult of a symbol by 2", "rarity": "rare", "desc": "Higher multipliers for one symbol"},
+    
+    # LEGENDARY TIER (5% base, 5% upgrade 1, 9% upgrade 2, 20% upgrade 3)
     {"num": 9, "name": "Double Heads mult of coin", "rarity": "legendary", "desc": "Coin Heads becomes 10x instead of 5x"},
-    {"num": 10, "name": "All patterns trigger one more time", "rarity": "legendary", "desc": "Every pattern gets +1 trigger"},
+    {"num": 10, "name": "Remove all multipliers except 1 from a symbol", "rarity": "legendary", "desc": "Simplify a symbol's multipliers drastically"},
+    {"num": 11, "name": "All cooldown charms take 1 less charge to recharge", "rarity": "legendary", "desc": "Speed up charm cooldowns (minimum 1)"},
+    {"num": 12, "name": "+1 charm space", "rarity": "legendary", "desc": "Gain an extra charm slot (cannot be used 3+ times)"},
+    {"num": 13, "name": "Increase max mult of all symbols by 10", "rarity": "legendary", "desc": "All symbols roll higher multipliers"},
+    {"num": 14, "name": "Debt Decreases by 50%", "rarity": "legendary", "desc": "Next deadline amount reduced (uncopyable)"},
+    {"num": 15, "name": "Apply a random trait to all charms", "rarity": "legendary", "desc": "Enhance all active charms (cannot apply eternal)"},
+    {"num": 16, "name": "All patterns trigger one more time", "rarity": "legendary", "desc": "Every pattern gets +1 trigger permanently"},
+    
+    # EXOTIC TIER (1% upgrade 2, 9% upgrade 3)
+    {"num": 17, "name": "I CAN LIVE FOREVER", "rarity": "exotic", "desc": "Give eternal trait to a charm (immune to destruction)"},
+    {"num": 18, "name": "Spawn exotic charm & reset", "rarity": "exotic", "desc": "Spawn exotic charm, reset deadline, discard non-exotic/eternal charms"},
+    {"num": 19, "name": "GODSMOS", "rarity": "exotic", "desc": "ALL charms trigger 1 more time permanently (does not reappear)"},
+    {"num": 20, "name": "^1.2 to all patterns and symbols", "rarity": "exotic", "desc": "Multiply all pattern and symbol values permanently"},
+    {"num": 21, "name": "^1.15 patterns, ^1.3 symbols, ^1.1 earnings", "rarity": "exotic", "desc": "Separate multipliers to each aspect"},
+    {"num": 22, "name": "Gain 10% of deadline each round", "rarity": "exotic", "desc": "Passive income based on deadline (uncopyable, no reappear)"},
+    {"num": 23, "name": "Apply trait to all charms & store", "rarity": "exotic", "desc": "All store charms get traits from now on"},
+    {"num": 24, "name": "All charms cost 1 less", "rarity": "exotic", "desc": "Store charms now cost 1 less permanently (minimum FREE)"},
+    
+    # TRANSCENDENT TIER (1% upgrade 3)
+    {"num": 25, "name": "Spawn 2 exotic charms", "rarity": "transcendent", "desc": "Add 2 exotic charms without destroying others"},
+    {"num": 26, "name": "Spawn essence of the gods", "rarity": "transcendent", "desc": "Mysterious artifact appears (effects unknown)"},
 ]
 
 def show_phone_abilities():
@@ -71,9 +107,27 @@ def trigger_button():
         print("No phone ability selected.")
 
 def add_achievement(name):
-    if name not in ACHIEVEMENTS:
-        ACHIEVEMENTS.add(name)
-        print(f"ACHIEVEMENT: {name}")
+    if name not in ACHIEVEMENTS_UNLOCKED:
+        ACHIEVEMENTS_UNLOCKED.add(name)
+        print(f"🏆 ACHIEVEMENT UNLOCKED: {name}")
+
+# ============================================================
+# ACHIEVEMENTS
+# ============================================================
+ACHIEVEMENTS_LIST = [
+    "Score a Jackpot",
+    "True Player: Unlock the World Ender",
+    "777: Score your first 777",
+    "Phone titan: Have all phone upgrades",
+    "Trait master: All charms on table have traits",
+    "#: Get into the numbers with hyperions",
+    "Exotic master: Get all exotic charms",
+    "Unlucky: Score no coins in a round",
+    "Even Unluckier: Score no coins in a deadline",
+    "I… Lost?: Lose",
+    "Button master: Trigger button 5 times before spin",
+    "Hey that's ME: Fuse to get Sohan Swamy"
+]
 
 # ============================================================
 # SYMBOL BASE CLASS
@@ -823,129 +877,505 @@ class Charm:
       - weight_active: increases spawn weight of a symbol type
       - modifier: chance for symbols to spawn golden
       - retrigger: patterns trigger one extra time
+      - cooldown: has cooldown-based activation
+      - passive: always active
+      - trait: applies modifier to other charms
     """
 
-    def __init__(self, name, description, kind, target=None, amount=0, cooldown_rounds=0):
+    def __init__(self, name, description, kind, target=None, amount=0, cooldown_rounds=0, rarity="common"):
         self.name = name
         self.description = description
         self.kind = kind
         self.target = target
         self.amount = amount
         self.cooldown_rounds = cooldown_rounds
+        self.rarity = rarity
 
     def __str__(self):
         return f"{self.name}: {self.description}"
 
 
 # ============================================================
-# CHARM DEFINITIONS
+# CHARM DEFINITIONS - COMMON TIER (50% spawn rate base)
 # ============================================================
 
-Spare_Change = Charm(
-    "Spare Change",
-    "Gain +1 max spin per round.",
-    kind="extra_spin"
+# Luck charms
+Tomato = Charm(
+    "Tomato",
+    "+3 luck for next spin (17.5% trigger chance)",
+    kind="luck",
+    amount=3,
+    rarity="common"
 )
 
-ImBadAtMath = Charm(
-    "I'm Bad At Math",
-    "35% chance to trigger patterns one more time.",
-    kind="retrigger"
+Peach = Charm(
+    "Peach",
+    "+5 luck for next spin (10% trigger chance)",
+    kind="luck",
+    amount=5,
+    rarity="common"
 )
 
-Struck_Gold = Charm(
-    "Struck Gold",
-    "Activate to increase Coin spawn weight.",
-    kind="weight_active",
-    target=Coin,
-    cooldown_rounds=3
-)
-
-Trick_Deck = Charm(
-    "Trick Deck",
-    "Activate to increase Card spawn weight.",
-    kind="weight_active",
-    target=Card,
-    cooldown_rounds=3
-)
-
-ILoveTops = Charm(
-    "I Love Tops",
-    "Activate to increase Spinner spawn weight.",
-    kind="weight_active",
-    target=Spinner,
-    cooldown_rounds=3
-)
-
-Dice_Hard = Charm(
-    "Dice Hard",
-    "Activate to increase Dice spawn weight.",
-    kind="weight_active",
-    target=Dice,
-    cooldown_rounds=3
-)
-
-WheelOfFortune = Charm(
-    "Wheel of Fortune",
-    "Activate to increase Wheel spawn weight.",
-    kind="weight_active",
+# Golden Charms (existing)
+GoldenWheels = Charm(
+    "Golden Wheels",
+    "25% chance for Wheels to spawn with GOLD modifier",
+    kind="modifier",
     target=Wheel,
-    cooldown_rounds=3
+    amount=25,
+    rarity="common"
+)
+
+GoldenDice = Charm(
+    "Golden Dice",
+    "20% chance for Dice to spawn with GOLD modifier",
+    kind="modifier",
+    target=Dice,
+    amount=20,
+    rarity="common"
 )
 
 GoldenCoins = Charm(
     "Golden Coins",
-    "25% chance for Coins to spawn with the GOLD modifier.",
+    "25% chance for Coins to spawn with GOLD modifier",
     kind="modifier",
     target=Coin,
-    amount=25
-)
-
-Rigged_Dice = Charm(
-    "Rigged Dice",
-    "20% chance for Dice to spawn with the GOLD modifier.",
-    kind="modifier",
-    target=Dice,
-    amount=20
+    amount=25,
+    rarity="common"
 )
 
 GoldenSpinners = Charm(
     "Golden Spinners",
-    "30% chance for Spinners to spawn with the GOLD modifier.",
+    "30% chance for Spinners to spawn with GOLD modifier",
     kind="modifier",
     target=Spinner,
-    amount=30
+    amount=30,
+    rarity="common"
 )
 
 GoldenCards = Charm(
     "Golden Cards",
-    "25% chance for Cards to spawn with the GOLD modifier.",
+    "25% chance for Cards to spawn with GOLD modifier",
     kind="modifier",
     target=Card,
-    amount=25
+    amount=25,
+    rarity="common"
 )
 
-GoldenWheels = Charm(
-    "Golden Wheels",
-    "25% chance for Wheels to spawn with the GOLD modifier.",
-    kind="modifier",
-    target=Wheel,
-    amount=25
+# ============================================================
+# CHARM DEFINITIONS - UNCOMMON TIER (30% spawn rate base)
+# ============================================================
+
+# Manifestation charms
+ManifestationCharm = Charm(
+    "Manifestation",
+    "Extra spawn of a symbol type",
+    kind="manifestation",
+    rarity="uncommon"
 )
+
+# Extra spin charm
+Spare_Change = Charm(
+    "Spare Change",
+    "Gain +1 max spin per round",
+    kind="extra_spin",
+    rarity="uncommon"
+)
+
+# Weight-active charms (cooldown based)
+Struck_Gold = Charm(
+    "Struck Gold",
+    "Activate to increase Coin spawn weight",
+    kind="weight_active",
+    target=Coin,
+    cooldown_rounds=3,
+    rarity="uncommon"
+)
+
+Trick_Deck = Charm(
+    "Trick Deck",
+    "Activate to increase Card spawn weight",
+    kind="weight_active",
+    target=Card,
+    cooldown_rounds=3,
+    rarity="uncommon"
+)
+
+ILoveTops = Charm(
+    "I Love Tops",
+    "Activate to increase Spinner spawn weight",
+    kind="weight_active",
+    target=Spinner,
+    cooldown_rounds=3,
+    rarity="uncommon"
+)
+
+Dice_Hard = Charm(
+    "Dice Hard",
+    "Activate to increase Dice spawn weight",
+    kind="weight_active",
+    target=Dice,
+    cooldown_rounds=3,
+    rarity="uncommon"
+)
+
+WheelOfFortune = Charm(
+    "Wheel of Fortune",
+    "Activate to increase Wheel spawn weight",
+    kind="weight_active",
+    target=Wheel,
+    cooldown_rounds=3,
+    rarity="uncommon"
+)
+
+# ============================================================
+# CHARM DEFINITIONS - RARE TIER (20% spawn rate base)
+# ============================================================
+
+ImBadAtMath = Charm(
+    "I'm Bad At Math",
+    "35% chance to trigger patterns one more time",
+    kind="retrigger",
+    rarity="rare"
+)
+
+ScoreXPatterns = Charm(
+    "Pattern Doubler",
+    "When you score X patterns, double all symbol values until end of round",
+    kind="conditional_mult",
+    rarity="rare"
+)
+
+NoPatternBoost = Charm(
+    "Clutch Play",
+    "When you score no patterns, double symbol/pattern mults and 1.5x earnings",
+    kind="conditional_mult",
+    rarity="rare"
+)
+
+EarningsMultUp = Charm(
+    "Earnings Boost",
+    "Earnings mult +1 (doesn't take space)",
+    kind="earnings_mult",
+    rarity="rare"
+)
+
+SymbolsMultUp = Charm(
+    "Symbol Power",
+    "Symbols mult +1 permanently (cooldown 2)",
+    kind="symbols_mult",
+    cooldown_rounds=2,
+    rarity="rare"
+)
+
+PatternsMultScaling = Charm(
+    "Pattern Scaling",
+    "Patterns mult +1 for every 1.5x deadline earned",
+    kind="patterns_mult_scaling",
+    rarity="rare"
+)
+
+ExtraSymbolTrigger = Charm(
+    "Extra Trigger",
+    "Every symbol except Coin triggers one more time (cooldown 4)",
+    kind="symbol_retrigger",
+    cooldown_rounds=4,
+    rarity="rare"
+)
+
+CoinExtraTrigger = Charm(
+    "Coin Rush",
+    "Coin triggers two more times (cooldown 5)",
+    kind="coin_retrigger",
+    cooldown_rounds=5,
+    rarity="rare"
+)
+
+# ============================================================
+# CHARM DEFINITIONS - LEGENDARY TIER (5% spawn rate base)
+# ============================================================
+
+CCHARM = Charm(
+    "CCHARM",
+    "All cooldown charms trigger one more time",
+    kind="cooldown_retrigger",
+    rarity="legendary"
+)
+
+ProtestingCall = Charm(
+    "Protesting Call",
+    "All phone abilities trigger one more time",
+    kind="phone_retrigger",
+    rarity="legendary"
+)
+
+WorldRecordPepper = Charm(
+    "World Record Pepper",
+    "Score 15+ patterns in a spin = double all symbol values (resets end of deadline)",
+    kind="conditional_mult_15",
+    rarity="legendary"
+)
+
+GiantPeach = Charm(
+    "Giant Peach",
+    "Score 30+ patterns in a spin = double patterns and symbols (resets end of deadline)",
+    kind="conditional_mult_30",
+    rarity="legendary"
+)
+
+LargestTomato = Charm(
+    "The Largest Tomato Ever",
+    "Score 50+ patterns = double value, then triple, then quad, etc. (resets end of deadline)",
+    kind="conditional_mult_exponential",
+    rarity="legendary"
+)
+
+PSA15 = Charm(
+    "PSA 15",
+    "Charms giving +1 to mult now give +10 to patterns, x1.5 to symbols",
+    kind="mult_boost",
+    rarity="legendary"
+)
+
+Flowers = Charm(
+    "Flowers",
+    "Increase value of all symbols every other pattern (resets end of deadline)",
+    kind="alternating_boost",
+    rarity="legendary"
+)
+
+INeedToStopWinning = Charm(
+    "I NEED TO STOP WINNING",
+    "Jackpots don't occur - one random cell changes symbol instead (requires 6 charges)",
+    kind="jackpot_prevention",
+    cooldown_rounds=6,
+    rarity="legendary"
+)
+
+GoldRush = Charm(
+    "Gold Rush",
+    "If >=1 symbol has GOLD modifier, increase its value by base value per trigger, permanently",
+    kind="gold_amplifier",
+    rarity="legendary"
+)
+
+# ============================================================
+# CHARM DEFINITIONS - EXOTIC TIER (1-9% spawn rate, upgrade dependent)
+# ============================================================
+
+QuantProfessor = Charm(
+    "Quant Professor",
+    "Earnings mult doubles every time you score a jackpot with all symbols mult=1",
+    kind="exotic_earnings",
+    rarity="exotic"
+)
+
+IsThisBroken = Charm(
+    "Is this broken?",
+    "Symbols and patterns mult triple every jackpot with all symbols mult=1",
+    kind="exotic_triple",
+    rarity="exotic"
+)
+
+TenXMult = Charm(
+    "+10xmult",
+    "Jackpot of all symbols with mult=1 converts to +10 xmult per symbol",
+    kind="exotic_xmult",
+    rarity="exotic"
+)
+
+CoinTailsBoost = Charm(
+    "^^1.1",
+    "+1 then ^1.7 coin tails mult every jackpot of all tails (resets end of round)",
+    kind="exotic_tails",
+    rarity="exotic"
+)
+
+ExponentialMult = Charm(
+    "^^^2",
+    "^1.5 any symbol xmult every jackpot of least value xmult (resets end of round)",
+    kind="exotic_exponential",
+    rarity="exotic"
+)
+
+ExponentialGrowth = Charm(
+    "Exponential Mult is broken",
+    "^1 base, gains ^0.01 for every jackpot pattern trigger",
+    kind="exotic_growth",
+    rarity="exotic"
+)
+
+AlwaysOn = Charm(
+    "Always On",
+    "50% chance for button to not consume charges when pressed",
+    kind="button_preservation",
+    rarity="exotic"
+)
+
+TheSeraphim = Charm(
+    "The Seraphim",
+    "When you score all patterns except Jackpot, ^3 to symbols and patterns (resets end of round)",
+    kind="exotic_seraphim",
+    rarity="exotic"
+)
+
+# ============================================================
+# CHARM DEFINITIONS - EXOTIC TIER (SPECIAL - SPAWNED FROM PHONE ABILITIES ONLY)
+# ============================================================
+
+Blood = Charm(
+    "Blood",
+    "+5% chance for symbols to have any symbol modifier",
+    kind="modifier_chance",
+    amount=5,
+    rarity="exotic"
+)
+
+Soul = Charm(
+    "Soul",
+    "+5% chance for symbols to have battery modifier",
+    kind="battery_modifier",
+    amount=5,
+    rarity="exotic"
+)
+
+Body = Charm(
+    "Body",
+    "+5% chance for symbols to have repetition modifier",
+    kind="repetition_modifier",
+    amount=5,
+    rarity="exotic"
+)
+
+SevenDeadlySins = Charm(
+    "7 Deadly Sins",
+    "5% chance to get three 7s on board (1,1)(1,2)(1,3). Reward ^^2 coins earned this round",
+    kind="seven_multiplier",
+    rarity="exotic"
+)
+
+InfiniteStorage = Charm(
+    "Infinite Storage",
+    "+1 charm space for every 5+ jackpots in spin, +1 for each jackpot after 10th",
+    kind="space_scaling",
+    rarity="exotic"
+)
+
+RELOADING = Charm(
+    "RELOADING",
+    "All symbols gain 1/9 of current value every shop restock. Restock costs /2",
+    kind="shop_scaling",
+    rarity="exotic"
+)
+
+EssenceOfGods = Charm(
+    "Essence of the Gods",
+    "Seems like it doesn't do anything…yet",
+    kind="mystery",
+    rarity="exotic"
+)
+
+THEWORLDENDER = Charm(
+    "THE WORLD ENDER",
+    "20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x, 777 gain [x^2]x. X increases ^0.2 per jackpot. Spawn 777 next spin. +1 charm space permanently",
+    kind="world_ender",
+    cooldown_rounds=3,
+    rarity="transcendent"
+)
+
+# ============================================================
+# CRAFTABLE CHARMS (RECIPES)
+# ============================================================
+
+CRAFTABLE_CHARMS = {
+    "Phone Upgrade": {
+        "name": "Phone Upgrade",
+        "description": "Common calls 0% chance, legendary calls 5% chance",
+        "requires": ["Protesting Call", "CCHARM", "Gold Rush"],
+        "rarity": "craftable"
+    },
+    "Phone Upgrade MKII": {
+        "name": "Phone Upgrade MKII",
+        "description": "Exotic phone calls 1% spawn chance",
+        "requires": ["Protesting Call", "CCHARM", "PSA 15", "Flowers"],
+        "rarity": "craftable"
+    },
+    "Phone Upgrade MKIII": {
+        "name": "Phone Upgrade MKIII",
+        "description": "Transcendent calls 1% spawn, common 0%",
+        "requires": ["CCHARM", "Protesting Call", "I NEED TO STOP WINNING", "Sohan Swamy", "Flowers", "Gold Rush"],
+        "rarity": "craftable"
+    },
+    "Charm Upgrade": {
+        "name": "Charm Upgrade",
+        "description": "Legendary charms can spawn in store",
+        "requires": ["I'm Bad At Math", "CCHARM"],  # Two retrigger charms
+        "rarity": "craftable"
+    },
+    "Symbol Upgrade": {
+        "name": "Symbol Upgrade",
+        "description": "15% chance for any symbol to have any symbol modifier",
+        "requires": ["I can't stop winning", "Re-Retrigger", "AGAINAGAINAGAIN"],
+        "rarity": "craftable"
+    },
+    "Human Upgrade": {
+        "name": "Human Upgrade",
+        "description": "+20% chance for symbols to have any modifier. Modifiers trigger twice. Max 4 per symbol",
+        "requires": ["Soul", "Body", "Blood"],
+        "rarity": "craftable"
+    },
+    "777 Upgrade": {
+        "name": "777 Upgrade",
+        "description": "Button triggers give 100% chance for 777. 777 value +^^0.01 per jackpot",
+        "requires": ["7 Deadly Sins", "Giant Peach", "The Largest Tomato Ever"],
+        "rarity": "craftable"
+    },
+    "Sohan Swamy": {
+        "name": "Sohan Swamy",
+        "description": "+1 value on all symbols",
+        "requires": ["All Exotic Charms"],  # Requires all exotic charms
+        "rarity": "craftable_exotic"
+    }
+}
+
+# ============================================================
+# ALL CHARMS LIST
+# ============================================================
 
 ALL_CHARMS = [
+    # Common
+    Tomato, Peach,
+    GoldenWheels, GoldenDice, GoldenCoins, GoldenSpinners, GoldenCards,
+    
+    # Uncommon
+    ManifestationCharm,
     Spare_Change,
-    Struck_Gold,
-    Trick_Deck,
-    ILoveTops,
-    Dice_Hard,
-    WheelOfFortune,
+    Struck_Gold, Trick_Deck, ILoveTops, Dice_Hard, WheelOfFortune,
+    
+    # Rare
     ImBadAtMath,
-    GoldenCoins,
-    Rigged_Dice,
-    GoldenSpinners,
-    GoldenCards,
-    GoldenWheels
+    ScoreXPatterns, NoPatternBoost,
+    EarningsMultUp, SymbolsMultUp, PatternsMultScaling,
+    ExtraSymbolTrigger, CoinExtraTrigger,
+    
+    # Legendary
+    CCHARM, ProtestingCall,
+    WorldRecordPepper, GiantPeach, LargestTomato,
+    PSA15, Flowers,
+    INeedToStopWinning, GoldRush,
+    
+    # Exotic
+    QuantProfessor, IsThisBroken, TenXMult,
+    CoinTailsBoost, ExponentialMult, ExponentialGrowth,
+    AlwaysOn, TheSeraphim,
+    
+    # Transcendent
+    Blood, Soul, Body,
+    SevenDeadlySins, InfiniteStorage, RELOADING,
+    EssenceOfGods,
+    
+    # Ultimate
+    THEWORLDENDER
 ]
 
 
@@ -991,13 +1421,19 @@ def store_phase(money, owned_charms):
       - Shows 4 random charms not yet owned
       - Charms cost $5
       - Player may buy one charm per visit
+      - Exotic charms and THE WORLD ENDER are not available in shop
     """
 
     print("\nWelcome to the store.")
     print(f"You have ${money}. Charms cost $5 each.")
 
-    # Filter out charms already owned
-    available = [c for c in ALL_CHARMS if c not in [d['charm'] for d in owned_charms]]
+    # Filter out charms already owned AND exotic charms (only from phone abilities)
+    available = [
+        c for c in ALL_CHARMS 
+        if c not in [d['charm'] for d in owned_charms]
+        and c.rarity != "exotic"
+        and c.name != "THE WORLD ENDER"
+    ]
 
     if not available:
         print("No more charms available.")
@@ -1098,47 +1534,111 @@ def get_spin_amount(money, max_spins):
 
 def charm_phase(owned_charms, active_bonuses, symbol_classes=None):
     """
-    NEW BEHAVIOR:
-    When the player types 'charm', ALL weight_active charms that are off cooldown
+    UPDATED BEHAVIOR:
+    When the player types 'charm', ALL cooldown-based charms that are off cooldown
     automatically activate, in order, with no menu.
-
-    Each charm keeps its own diminishing-return chain (Option C).
+    
+    This includes:
+      - weight_active charms (Struck Gold, Trick Deck, etc.)
+      - Any other charm with cooldown_rounds > 0 and currently available
+    
+    Each charm keeps its own diminishing-return chain.
     """
 
     if symbol_classes is None:
         symbol_classes = BASE_SYMBOL_CLASSES
 
-    # All weight charms that can be activated
-    available = [d for d in owned_charms if d['cooldown'] == 0 and d['charm'].kind == "weight_active"]
+    # All charms with cooldowns that are currently available
+    available = [d for d in owned_charms if d['cooldown'] == 0 and d['charm'].cooldown_rounds > 0]
 
     if not available:
-        print("No weight charms available to activate.")
+        print("No cooldown charms available to activate.")
         return
 
-    print("\nActivating ALL available weight charms...")
+    print("\n🎯 Activating ALL available cooldown charms...")
 
     for d in available:
         charm = d['charm']
-        target_cls = charm.target
-        target_name = target_cls.__name__
+        
+        # Handle weight_active charms
+        if charm.kind == "weight_active":
+            target_cls = charm.target
+            target_name = target_cls.__name__
 
-        # First activation this round
-        if d['activations_this_round'] == 0:
-            increase = 20
-            active_bonuses[target_cls] = active_bonuses.get(target_cls, getattr(target_cls, "weight", 1)) + increase
-            d['last_increase'] = increase
-            print(f"{charm.name} activated! {target_name} weight increased by {increase}.")
+            # First activation this round
+            if d['activations_this_round'] == 0:
+                increase = 20
+                active_bonuses[target_cls] = active_bonuses.get(target_cls, getattr(target_cls, "weight", 1)) + increase
+                d['last_increase'] = increase
+                print(f"  ✓ {charm.name}: {target_name} weight +{increase}")
 
+            else:
+                # Subsequent activations: 90% of last increase (diminishing returns)
+                increase = d['last_increase'] * 0.9
+                active_bonuses[target_cls] = active_bonuses[target_cls] + increase
+                d['last_increase'] = increase
+                print(f"  ✓ {charm.name} (again): {target_name} weight +{increase:.1f}")
+
+        # Handle other cooldown charms
         else:
-            # Subsequent activations this round: 90% of last increase
-            increase = d['last_increase'] * 0.9
-            active_bonuses[target_cls] = active_bonuses[target_cls] + increase
-            d['last_increase'] = increase
-            print(f"{charm.name} activated again! {target_name} weight increased by {increase:.1f}.")
+            print(f"  ✓ {charm.name} activated!")
 
         d['activations_this_round'] += 1
         d['uses'] += 1
-        d['cooldown'] = 3
+        d['cooldown'] = charm.cooldown_rounds
+    
+    print()
+
+
+# ============================================================
+# CHARM EFFECT HELPERS
+# ============================================================
+
+def get_charm_space_used(owned_charms):
+    """Calculate how many charm slots are currently used."""
+    return len(owned_charms)
+
+def get_modifier_chance_bonus(owned_charms):
+    """Calculate total % bonus to symbol modifier chance from charms."""
+    bonus = 0
+    for d in owned_charms:
+        charm = d['charm']
+        if charm.kind == "modifier_chance":
+            bonus += charm.amount
+    return bonus
+
+def apply_charm_effects(owned_charms, board, patterns_scored=0):
+    """
+    Apply passive charm effects:
+    - modifier_chance: increase symbol modifier spawn chances
+    - Infinite Storage: increase charm space if 5+ jackpots
+    - World Ender effects: passive +4 luck, modifier doubling, etc.
+    """
+    effects = {
+        'modifier_chance_bonus': 0,
+        'luck_bonus': 0,
+        'earnings_mult': 1.0,
+        'symbols_mult': 1.0,
+        'patterns_mult': 1.0
+    }
+    
+    for d in owned_charms:
+        charm = d['charm']
+        
+        if charm.kind == "modifier_chance":
+            effects['modifier_chance_bonus'] += charm.amount
+        elif charm.kind == "world_ender":
+            effects['luck_bonus'] += 4
+    
+    return effects
+
+def has_charm(owned_charms, charm_name):
+    """Check if player has a specific charm."""
+    return any(d['charm'].name == charm_name for d in owned_charms)
+
+def count_charm_by_rarity(owned_charms, rarity):
+    """Count how many charms of a specific rarity the player has."""
+    return sum(1 for d in owned_charms if d['charm'].rarity == rarity)
 
 
 # ============================================================
@@ -1205,6 +1705,7 @@ def main():
     BASE_MAX_SPINS = 8
     owned_charms = []
     active_bonuses = {}
+    charm_space_max = 6  # Start with 6 max charm slots
     deadlines = DeadlineSystem()
 
     board = Board(3, 5)
@@ -1222,7 +1723,9 @@ def main():
             break
 
         if choice == "store":
-            money, owned_charms = store_phase(money, owned_charms)
+            result = store_phase(money, owned_charms)
+            if result:
+                money, owned_charms = result
             continue
 
         if choice == "charm":
