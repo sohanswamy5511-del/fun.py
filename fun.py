@@ -6,14 +6,21 @@ PHONE_UPGRADE_LEVEL = 0
 ACHIEVEMENTS_UNLOCKED = set()
 CURRENT_PHONE_ABILITY = None
 
+PHONE_ABILITY_UNLOCKS = {
+    0: ["common", "uncommon", "rare"],
+    1: ["uncommon", "rare", "legendary"],
+    2: ["rare", "legendary", "exotic"],
+    3: ["legendary", "exotic", "transcendent"]
+}
+
 # ============================================================
 # PHONE ABILITIES (WITH UPGRADE PROBABILITIES)
 # ============================================================
 # Rarity probabilities change based on phone upgrades
-# Base: Common 50%, Uncommon 30%, Rare 15%, Legendary 5%
+# Base: Common 50%, Uncommon 30%, Rare 20%,
 # Upgrade 1: Common 0%, Uncommon 60%, Rare 35%, Legendary 5%
 # Upgrade 2: Common 0%, Uncommon 40%, Rare 50%, Legendary 9%, Exotic 1%
-# Upgrade 3: Common 0%, Uncommon 0%, Rare 0%, Legendary 20%, Exotic 9%, Transcendent 1%
+# Upgrade 3: Common 0%, Uncommon 0%, Rare 70%, Legendary 20%, Exotic 9%, Transcendent 1%
 
 PHONE_ABILITIES = [
     # COMMON TIER (50% base, 0% with upgrade 1+)
@@ -22,7 +29,7 @@ PHONE_ABILITIES = [
     {"num": 3, "name": "Restore charges on cooldown charms", "rarity": "common", "desc": "Reset all charm cooldowns"},
     
     # UNCOMMON TIER (30% base, 60% upgrade 1, 40% upgrade 2, 0% upgrade 3)
-    {"num": 4, "name": "+1 manifestation for a symbol", "rarity": "uncommon", "desc": "Add 1 extra spawn of a symbol"},
+    {"num": 4, "name": "+2 manifestation for a symbol", "rarity": "uncommon", "desc": "Average +2 extra of one symbol type for the rest of the deadline"},
     {"num": 5, "name": "Add a random trait to a charm", "rarity": "uncommon", "desc": "Enhance a charm with a trait"},
     {"num": 6, "name": "+1 charm space", "rarity": "uncommon", "desc": "Gain an extra charm slot"},
     
@@ -55,16 +62,26 @@ PHONE_ABILITIES = [
     {"num": 26, "name": "Spawn essence of the gods", "rarity": "transcendent", "desc": "Mysterious artifact appears (effects unknown)"},
 ]
 
+def get_available_phone_abilities():
+    """Return phone abilities available at the current phone upgrade level."""
+    level = min(max(PHONE_UPGRADE_LEVEL, 0), max(PHONE_ABILITY_UNLOCKS.keys()))
+    allowed_rarities = PHONE_ABILITY_UNLOCKS.get(level, ["common", "uncommon"])
+    available = [ability for ability in PHONE_ABILITIES if ability["rarity"] in allowed_rarities]
+    return available if available else PHONE_ABILITIES
+
+
 def show_phone_abilities():
     """Display available phone abilities for the player to choose from."""
     global CURRENT_PHONE_ABILITY
     
+    available_abilities = get_available_phone_abilities()
+
     print("\n" + "="*50)
-    print("📞 PHONE ABILITIES - Choose one:")
+    print(f"📞 PHONE ABILITIES - Choose one (Upgrade level {PHONE_UPGRADE_LEVEL}):")
     print("="*50)
     
-    for ability in PHONE_ABILITIES:
-        print(f"{ability['num']}. {ability['name']} [{ability['rarity'].upper()}]")
+    for idx, ability in enumerate(available_abilities, start=1):
+        print(f"{idx}. {ability['name']} [{ability['rarity'].upper()}]")
         print(f"   {ability['desc']}")
     
     print("\nEnter the number of the ability to select, or 0 to skip:")
@@ -83,8 +100,8 @@ def show_phone_abilities():
         
         choice_num = int(choice)
         
-        if choice_num < 0 or choice_num > len(PHONE_ABILITIES):
-            print(f"Invalid choice. Please enter 0-{len(PHONE_ABILITIES)}.")
+        if choice_num < 0 or choice_num > len(available_abilities):
+            print(f"Invalid choice. Please enter 0-{len(available_abilities)}.")
             continue
         
         if choice_num == 0:
@@ -92,7 +109,7 @@ def show_phone_abilities():
             CURRENT_PHONE_ABILITY = None
             break
         
-        selected = PHONE_ABILITIES[choice_num - 1]
+        selected = available_abilities[choice_num - 1]
         CURRENT_PHONE_ABILITY = selected
         print(f"✅ Selected: {selected['name']}")
         break
@@ -286,7 +303,7 @@ class Wheel(Symbol):
 # ============================================================
 
 class Seven(Symbol):
-    weight = 1
+    weight = 0
 
     def __init__(self):
         super().__init__("Seven", base_value=777)
@@ -621,11 +638,12 @@ class Board:
     # FILL BOARD WITH SYMBOLS
     # --------------------------------------------------------
 
-    def fill_cells(self, symbol_classes, weights, owned_charms):
+    def fill_cells(self, symbol_classes, weights, owned_charms, active_bonuses):
         """
         Fill empty cells with symbols, applying:
           - Weight overrides
           - Global bonuses
+          - Recharge/repeat modifier effects
           - Golden modifier chance
           - Activation (roll/spin/draw)
         """
@@ -635,10 +653,12 @@ class Board:
 
         # Check charms
         has_golden_coins = any(d['charm'].kind == "modifier" and d['charm'].target is Coin for d in owned_charms)
-        has_rigged_dice = any(d['charm'].kind == "modifier" and d['charm'].target is Dice for d in owned_charms)
+        has_golden_dice = any(d['charm'].kind == "modifier" and d['charm'].target is Dice for d in owned_charms)
         has_golden_spinners = any(d['charm'].kind == "modifier" and d['charm'].target is Spinner for d in owned_charms)
         has_golden_cards = any(d['charm'].kind == "modifier" and d['charm'].target is Card for d in owned_charms)
         has_golden_wheels = any(d['charm'].kind == "modifier" and d['charm'].target is Wheel for d in owned_charms)
+        battery_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "battery_modifier")
+        repetition_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "repetition_modifier")
 
         for x in range(self.rows):
             for y in range(self.cols):
@@ -656,13 +676,22 @@ class Board:
                     # Activate (roll/spin/draw)
                     symbol.activate()
 
+                    # Random battery/repeat modifiers from owned charms
+                    if battery_chance and random.randint(1, 100) <= battery_chance:
+                        symbol.current_value += 1
+                        symbol.display_name += " [RECHARGE]"
+
+                    if repetition_chance and random.randint(1, 100) <= repetition_chance:
+                        symbol.current_value *= 1.2
+                        symbol.display_name += " [REPEAT]"
+
                     # Golden modifier chance
                     if isinstance(symbol, Coin) and has_golden_coins:
                         if random.randint(1, 100) <= 25:
                             symbol.is_golden = True
                             symbol.display_name += " [GOLD]"
 
-                    if isinstance(symbol, Dice) and has_rigged_dice:
+                    if isinstance(symbol, Dice) and has_golden_dice:
                         if random.randint(1, 100) <= 20:
                             symbol.is_golden = True
                             symbol.display_name += " [GOLD]"
@@ -688,7 +717,7 @@ class Board:
     # SPIN
     # --------------------------------------------------------
 
-    def current_spin(self, symbol_classes, weights, owned_charms):
+    def current_spin(self, symbol_classes, weights, owned_charms, active_bonuses):
         """
         Perform a new spin:
           - Apply pending bonuses
@@ -698,7 +727,7 @@ class Board:
         self.apply_pending_bonuses()
 
         self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]
-        self.fill_cells(symbol_classes, weights, owned_charms)
+        self.fill_cells(symbol_classes, weights, owned_charms, active_bonuses)
         self.print_board()
         sleep(1)
 
@@ -708,17 +737,28 @@ class Board:
 
     def print_board(self, pattern_cells=None):
         print("\n=== BOARD ===")
-        for row in self.grid:
-            print(" | ".join(f"{s.display_name:12}" for s in row))
-        print("=============")
-        
-        # Output pattern cells in machine-readable format
+
+        highlighted_cells = set()
         if pattern_cells:
-            print("PATTERN_CELLS:", end="")
-            for pattern_name, cells in pattern_cells:
-                cells_str = ",".join(f"({x},{y})" for x, y in cells)
-                print(f"[{pattern_name}:{cells_str}]", end="")
-            print()
+            highlighted_cells = {
+                (x, y)
+                for _, cells in pattern_cells
+                for x, y in cells
+            }
+
+        for x, row in enumerate(self.grid):
+            row_cells = []
+            for y, s in enumerate(row):
+                cell_text = s.display_name
+                if (x, y) in highlighted_cells:
+                    cell_text = f"({cell_text})"
+                row_cells.append(f"{cell_text:14}")
+            print(" | ".join(row_cells))
+
+        print("=============")
+
+        if pattern_cells:
+            sleep(2)
         print()
 
     # --------------------------------------------------------
@@ -791,64 +831,38 @@ class Board:
         # ----------------------------------------------------
         # SCORE EACH PATTERN
         # ----------------------------------------------------
-        print("\n=== PATTERN BREAKDOWN ===")
-
         patterns_this_spin = len(chosen)
 
+        has_gold_rush = has_charm(owned_charms, "Gold Rush")
+
         for pattern, cells in chosen:
+            print(f"\nPattern: {pattern.name}")
+            self.print_board(pattern_cells=[(pattern.name, cells)])
 
-            symbol_values = []
-            golden_symbols = []
-            symbol_details = []
-
-            for (x, y) in cells:
-                s = self.grid[x][y]
-                value = s.current_value
-
-                detail = f"{s.display_name} @({x},{y}) = {s.current_value}"
-                if s.is_golden:
-                    detail += " (golden bonus queued for next spin)"
-                symbol_details.append(detail)
-
-                if s.is_golden:
-                    golden_symbols.append(s)
-
-                symbol_values.append(value)
-
-            pattern_sum = sum(symbol_values)
+            pattern_sum = sum(self.grid[x][y].current_value for x, y in cells)
             pattern_score = pattern.get_multiplier(pattern_sum) * triggers
             total += pattern_score
 
-            print(f"\nPattern: {pattern.name}")
-            print(f"Cells: {sorted(list(cells))}")
-            print("Symbols:")
-            for detail in symbol_details:
-                print(f"  - {detail}")
-            print(f"Sum after increases: {pattern_sum}")
-            print(f"Multiplier: x{pattern.current_multiplier_value}")
-            print(f"Triggers: {triggers}")
-            print(f"Contribution: {pattern_score}")
-            sleep(1)
+            if has_gold_rush:
+                golden_symbols = [self.grid[x][y] for x, y in cells if self.grid[x][y].is_golden]
+                if golden_symbols:
+                    pending_increases = {}
+                    for s in golden_symbols:
+                        stype = type(s)
+                        pending_increases[stype] = pending_increases.get(stype, 0) + s.base_value
 
-            # ------------------------------------------------
-            # GOLDEN SYMBOLS → QUEUE DELAYED BONUS
-            # ------------------------------------------------
-            if golden_symbols:
-                pending_increases = {}
-                for s in golden_symbols:
-                    stype = type(s)
-                    pending_increases[stype] = pending_increases.get(stype, 0) + s.base_value
+                    for stype, increase in pending_increases.items():
+                        total_increase = increase * triggers
+                        self.delayed_bonuses.append({
+                            "symbol_type": stype,
+                            "increase": total_increase,
+                            "delay": 1
+                        })
+                        print(
+                            f"Golden symbol bonus queued! A delayed +{total_increase} bonus for all {stype.__name__}s has been queued for the next spin."
+                        )
 
-                for stype, increase in pending_increases.items():
-                    total_increase = increase * triggers
-                    self.delayed_bonuses.append({
-                        "symbol_type": stype,
-                        "increase": total_increase,
-                        "delay": 1
-                    })
-                    print(
-                        f"Golden symbol bonus queued! A delayed +{total_increase} bonus for all {stype.__name__}s has been queued for the next spin."
-                    )
+            sleep(1.5)
 
         # ----------------------------------------------------
         # UPDATE DELAYED BONUSES
@@ -859,13 +873,14 @@ class Board:
         # ----------------------------------------------------
         # FINAL OUTPUT
         # ----------------------------------------------------
+        total_matches = patterns_this_spin * triggers
         print("\n=========================")
-        print(f"Total Matches: {patterns_this_spin}")
+        print(f"Total Matches: {patterns_this_spin} patterns * {triggers} triggers = {total_matches}")
         print(f"Total Value: {total}")
         print("=========================\n")
 
         self.grand_total += total
-        self.patterns_scored_this_spin = patterns_this_spin  # Store pattern count
+        self.patterns_scored_this_spin = total_matches
         return total
 
 
@@ -972,7 +987,7 @@ GoldenCards = Charm(
 # Manifestation charms
 ManifestationCharm = Charm(
     "Manifestation",
-    "Extra spawn of a symbol type",
+    "Average +2 extra of a chosen symbol type for the rest of the deadline",
     kind="manifestation",
     rarity="uncommon"
 )
@@ -1163,7 +1178,7 @@ GoldRush = Charm(
 )
 
 # ============================================================
-# CHARM DEFINITIONS - EXOTIC TIER (1-9% spawn rate, upgrade dependent)
+# CHARM DEFINITIONS - EXOTIC TIER (SPAWNED FROM PHONE ABILITIES ONLY)
 # ============================================================
 
 QuantProfessor = Charm(
@@ -1222,10 +1237,6 @@ TheSeraphim = Charm(
     rarity="exotic"
 )
 
-# ============================================================
-# CHARM DEFINITIONS - EXOTIC TIER (SPECIAL - SPAWNED FROM PHONE ABILITIES ONLY)
-# ============================================================
-
 Blood = Charm(
     "Blood",
     "+5% chance for symbols to have any symbol modifier",
@@ -1271,19 +1282,22 @@ RELOADING = Charm(
     rarity="exotic"
 )
 
+# ============================================================
+# CHARM DEFINITIONS - TRANSCENDENCE (THE END OF THE UNIVERSE)
+# ============================================================
+
+THEWORLDENDER = Charm(
+    "THE WORLD ENDER",
+    "20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x, 777 gain [x^2]x. X increases by 1 per 5 jackpots. Spawn 777 next spin. +1 charm space permanently",
+    kind="world_ender",
+    cooldown_rounds=3,
+    rarity="transcendent"
+)
+
 EssenceOfGods = Charm(
     "Essence of the Gods",
     "Seems like it doesn't do anything…yet",
     kind="mystery",
-    rarity="exotic"
-)
-
-
-THEWORLDENDER = Charm(
-    "THE WORLD ENDER",
-    "20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x, 777 gain [x^2]x. X increases ^0.2 per jackpot. Spawn 777 next spin. +1 charm space permanently",
-    kind="world_ender",
-    cooldown_rounds=3,
     rarity="transcendent"
 )
 
@@ -1316,29 +1330,35 @@ CRAFTABLE_CHARMS = {
         "requires": ["I'm Bad At Math", "CCHARM"],  # Two retrigger charms
         "rarity": "craftable"
     },
-    "Symbol Upgrade": {
+    "//Symbol": {
         "name": "Symbol Upgrade",
         "description": "15% chance for any symbol to have any symbol modifier",
         "requires": ["I can't stop winning", "Re-Retrigger", "AGAINAGAINAGAIN"],
         "rarity": "craftable"
     },
-    "Human Upgrade": {
+    "Human": {
         "name": "Human Upgrade",
         "description": "+20% chance for symbols to have any modifier. Modifiers trigger twice. Max 4 per symbol",
         "requires": ["Soul", "Body", "Blood"],
-        "rarity": "craftable"
+        "rarity": "craftable_exotic"
     },
-    "777 Upgrade": {
+    "777": {
         "name": "777 Upgrade",
         "description": "Button triggers give 100% chance for 777. 777 value +^^0.01 per jackpot",
         "requires": ["7 Deadly Sins", "Giant Peach", "The Largest Tomato Ever"],
-        "rarity": "craftable"
+        "rarity": "craftable_exotic"
     },
     "Sohan Swamy": {
         "name": "Sohan Swamy",
         "description": "+1 value on all symbols",
         "requires": ["All Exotic Charms"],  # Requires all exotic charms
         "rarity": "craftable_exotic"
+    },
+    "THE WORLD ENDER": {
+        "name": "THE WORLD ENDER",
+        "description": "20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x, 777 gain [x^2]x. X increases by 1 per 5 jackpots. Spawn 777 next spin. +1 charm space permanently",
+        "requires": ["Sohan Swamy", "EssenceOfGods x 3"],
+        "rarity": "craftable_transcendent"
     }
 }
 
@@ -1371,15 +1391,12 @@ ALL_CHARMS = [
     # Exotic
     QuantProfessor, IsThisBroken, TenXMult,
     CoinTailsBoost, ExponentialMult, ExponentialGrowth,
-    AlwaysOn, TheSeraphim,
-    
-    # Transcendent
-    Blood, Soul, Body,
+    AlwaysOn, TheSeraphim, Blood, Soul, Body,
     SevenDeadlySins, InfiniteStorage, RELOADING,
-    EssenceOfGods,
     
-    # Ultimate
-    THEWORLDENDER
+    
+    # Transcendency
+    THEWORLDENDER, EssenceOfGods,
 ]
 
 
@@ -1395,9 +1412,10 @@ def compute_effective_max_spins(base_max_spins, owned_charms):
     return base_max_spins + extra
 
 
-def compute_weight_overrides(symbol_classes, active_bonuses):
+def compute_weight_overrides(symbol_classes, active_bonuses, owned_charms=None):
     """
-    Compute weights with active bonuses, normalized to sum to 100.
+    Compute weights with active bonuses and manifestation charms,
+    then normalize to sum to 100.
     """
     weights = {}
     for cls in symbol_classes:
@@ -1407,6 +1425,14 @@ def compute_weight_overrides(symbol_classes, active_bonuses):
             base_w = getattr(cls, "weight", 1)
             weights[cls] = base_w
 
+    if owned_charms:
+        for d in owned_charms:
+            if d['charm'].kind == "manifestation":
+                if d.get('manifestation_target') is None:
+                    d['manifestation_target'] = random.choice(symbol_classes)
+                target_cls = d['manifestation_target']
+                weights[target_cls] = weights.get(target_cls, getattr(target_cls, "weight", 1)) + 13.333
+
     # Normalize to sum 100
     total = sum(weights.values())
     if total > 0:
@@ -1415,28 +1441,115 @@ def compute_weight_overrides(symbol_classes, active_bonuses):
 
     return weights
 
+
+def has_available_cooldown_charms(owned_charms):
+    return any(d['cooldown'] == 0 and d['charm'].cooldown_rounds > 0 for d in owned_charms)
+
+
+
+
+def requirements_met(owned_charms, requirement):
+    if requirement == "All Exotic Charms":
+        exotic_total = sum(1 for c in ALL_CHARMS if c.rarity == "exotic")
+        return sum(1 for d in owned_charms if d['charm'].rarity == "exotic") >= exotic_total
+
+    if " x " in requirement:
+        name, count_str = requirement.rsplit(" x ", 1)
+        if count_str.isdigit():
+            return sum(1 for d in owned_charms if d['charm'].name == name) >= int(count_str)
+
+    return any(d['charm'].name == requirement for d in owned_charms)
+
+
+def get_available_craftables(owned_charms, crafted_recipes):
+    available = []
+    for recipe_name, recipe in CRAFTABLE_CHARMS.items():
+        if recipe_name in crafted_recipes:
+            continue
+        if all(requirements_met(owned_charms, req) for req in recipe['requires']):
+            available.append(recipe)
+    return available
+
+
+def craft_phase(owned_charms, crafted_recipes):
+    global PHONE_UPGRADE_LEVEL
+    available = get_available_craftables(owned_charms, crafted_recipes)
+    if not available:
+        print("No craftable recipes are available right now.")
+        return crafted_recipes
+
+    print("\n🛠️  Craftable recipes:")
+    for idx, recipe in enumerate(available, start=1):
+        print(f"{idx}. {recipe['name']} - {recipe['description']}")
+    print("Enter the number of the recipe to craft, or press Enter to skip:")
+
+    choice = input("> ").strip()
+    if choice == "":
+        print("No recipe crafted.")
+        return crafted_recipes
+
+    if not choice.isdigit():
+        print("Invalid input. Crafting skipped.")
+        return crafted_recipes
+
+    idx = int(choice) - 1
+    if idx < 0 or idx >= len(available):
+        print("Invalid choice. Crafting skipped.")
+        return crafted_recipes
+
+    recipe = available[idx]
+    recipe_name = recipe['name']
+    crafted_recipes.add(recipe_name)
+
+    if recipe_name == "Charm Upgrade":
+        print("Charm Upgrade crafted! Legendary charms are now available in the store.")
+    elif recipe_name == "Phone Upgrade":
+        PHONE_UPGRADE_LEVEL = max(PHONE_UPGRADE_LEVEL, 1)
+        print("Phone Upgrade crafted! Phone ability progression has advanced.")
+    elif recipe_name == "Phone Upgrade MKII":
+        PHONE_UPGRADE_LEVEL = max(PHONE_UPGRADE_LEVEL, 2)
+        print("Phone Upgrade MKII crafted! Phone ability progression has advanced.")
+    elif recipe_name == "Phone Upgrade MKIII":
+        PHONE_UPGRADE_LEVEL = max(PHONE_UPGRADE_LEVEL, 3)
+        print("Phone Upgrade MKIII crafted! Phone ability progression has advanced.")
+    else:
+        print(f"{recipe_name} crafted!")
+
+    return crafted_recipes
+
+
+def reset_manifestation_targets(owned_charms):
+    """Reset manifestation targets when a new deadline begins."""
+    for d in owned_charms:
+        if d['charm'].kind == "manifestation":
+            d['manifestation_target'] = None
+
 # ============================================================
 # STORE SYSTEM
 # ============================================================
 
-def store_phase(money, owned_charms):
+def store_phase(money, owned_charms, crafted_recipes):
     """
     Store logic:
       - Shows 4 random charms not yet owned
       - Charms cost $5
       - Player may buy one charm per visit
       - Exotic charms and THE WORLD ENDER are not available in shop
+      - Legendary charms are only available after crafting Charm Upgrade
     """
 
     print("\nWelcome to the store.")
     print(f"You have ${money}. Charms cost $5 each.")
 
-    # Filter out charms already owned AND exotic charms (only from phone abilities)
+    # Filter out charms already owned AND exotic charms (only from phone abilities).
+    # Legendary charms become available only after crafting Charm Upgrade.
+    can_sell_legendary = "Charm Upgrade" in crafted_recipes
     available = [
         c for c in ALL_CHARMS 
         if c not in [d['charm'] for d in owned_charms]
         and c.rarity != "exotic"
         and c.name != "THE WORLD ENDER"
+        and (can_sell_legendary or c.rarity != "legendary")
     ]
 
     if not available:
@@ -1484,19 +1597,22 @@ def store_phase(money, owned_charms):
 # INPUT HELPERS
 # ============================================================
 
-def get_spin_amount(money, max_spins):
+def get_spin_amount(money, max_spins, owned_charms):
     """
     Ask the player how many spins they want.
     Options:
       - Enter a number (1 to max_spins)
       - Enter 'store' to visit the store
+      - Enter 'craft' to craft recipes
       - Enter 'charm' to activate charms
+      - Enter 'deadline_pay' to pay the deadline early
       - Enter 'q' to quit
     """
 
     while True:
         print(f"You have ${money}. Each spin costs $1.")
-        print(f"Enter number of spins (max {max_spins}), 'store' to visit store, 'charm' to activate charms, 'q' to quit, or 'deadline_pay' to pay the deadline early")
+        options = [f"number of spins (max {max_spins})", "'store' to visit store", "'craft' to craft recipes", "'charm' to activate charms", "'deadline_pay' to pay the deadline early", "'q' to quit"]
+        print("Enter " + ", ".join(options))
         choice = input("> ").strip().lower()
 
         if choice == "q":
@@ -1504,6 +1620,9 @@ def get_spin_amount(money, max_spins):
 
         if choice == "store":
             return "store"
+
+        if choice == "craft":
+            return "craft"
 
         if choice == "charm":
             return "charm"
@@ -1709,6 +1828,7 @@ def main():
     BASE_MAX_SPINS = 8
     owned_charms = []
     active_bonuses = {}
+    crafted_recipes = set()
     charm_space_max = 6  # Start with 6 max charm slots
     deadlines = DeadlineSystem()
 
@@ -1720,17 +1840,22 @@ def main():
 
     while money > 0:
         max_spins = compute_effective_max_spins(BASE_MAX_SPINS, owned_charms)
-        choice = get_spin_amount(money, max_spins)
+        choice = get_spin_amount(money, max_spins, owned_charms)
 
         if choice == "q":
             print("Thanks for playing!")
             break
 
         if choice == "store":
-            result = store_phase(money, owned_charms)
+            result = store_phase(money, owned_charms, crafted_recipes)
             if result:
                 money, owned_charms = result
             continue
+
+        if choice == "craft":
+            crafted_recipes = craft_phase(owned_charms, crafted_recipes)
+            continue
+
 
         if choice == "charm":
             charm_phase(owned_charms, active_bonuses, BASE_SYMBOL_CLASSES)
@@ -1749,6 +1874,7 @@ def main():
                     if d['charm'].kind == "weight_active":
                         d['activations_this_round'] = 0
                         d['last_increase'] = 0
+                reset_manifestation_targets(owned_charms)
                 print(deadlines.get_status_string())
             else:
                 print(f"Insufficient funds. Need ${deadline_amount:,}, have ${money}.")
@@ -1767,21 +1893,18 @@ def main():
                 d['cooldown'] -= 1
             d['activations_this_round'] = 0
 
-        weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses)
+        weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses, owned_charms)
         board.grand_total = 0
         patterns_scored_this_round = 0  # Track total patterns for conditional charms
 
         # Perform spins
         for i in range(spins):
             print(f"\n--- SPIN {i+1} ---")
-            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms)
+            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms, active_bonuses)
             board.display_total(owned_charms)
             patterns_scored_this_round += board.patterns_scored_this_spin
 
-            
-            if spins == 0:
-                pass
-            else:
+            if spins != 0 and has_available_cooldown_charms(owned_charms):
                 print("\n📜 Activate charms? (type 'charm' to activate, or press Enter to skip)")
                 charm_input = input("> ").strip().lower()
                 if charm_input == "charm":
@@ -1849,6 +1972,7 @@ def main():
                         if d['charm'].kind == "weight_active":
                             d['activations_this_round'] = 0
                             d['last_increase'] = 0
+                    reset_manifestation_targets(owned_charms)
                     print(f"\nNew deadline: {deadlines.get_status_string()}")
                     
                     # Show phone ability selection for deadline 2 and onwards
