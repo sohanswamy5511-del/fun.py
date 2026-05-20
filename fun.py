@@ -1,6 +1,10 @@
 import random
 from time import sleep
 
+ANSI_RED = "\033[31m"
+ANSI_RESET = "\033[0m"
+ANSI_CLEAR_SCREEN = "\033[2J\033[H"
+
 # Phone and Achievement system
 PHONE_UPGRADE_LEVEL = 0
 ACHIEVEMENTS_UNLOCKED = set()
@@ -12,6 +16,8 @@ PHONE_ABILITY_UNLOCKS = {
     2: ["rare", "legendary", "exotic"],
     3: ["legendary", "exotic", "transcendent"]
 }
+
+ALL_OBTAINABLE_ABILITIES = []
 
 # ============================================================
 # PHONE ABILITIES (WITH UPGRADE PROBABILITIES)
@@ -65,16 +71,25 @@ PHONE_ABILITIES = [
 def get_available_phone_abilities():
     """Return phone abilities available at the current phone upgrade level."""
     level = min(max(PHONE_UPGRADE_LEVEL, 0), max(PHONE_ABILITY_UNLOCKS.keys()))
-    allowed_rarities = PHONE_ABILITY_UNLOCKS.get(level, ["common", "uncommon"])
+    allowed_rarities = PHONE_ABILITY_UNLOCKS.get(level, ["common", "uncommon", "rare"])
     available = [ability for ability in PHONE_ABILITIES if ability["rarity"] in allowed_rarities]
     return available if available else PHONE_ABILITIES
+
+
+def get_phone_ability_options():
+    """Return a random sample of up to 3 obtainable phone abilities."""
+    global ALL_OBTAINABLE_ABILITIES
+    obtainable = get_available_phone_abilities()
+    sample_size = min(3, len(obtainable))
+    ALL_OBTAINABLE_ABILITIES = random.sample(obtainable, sample_size)
+    return ALL_OBTAINABLE_ABILITIES
 
 
 def show_phone_abilities():
     """Display available phone abilities for the player to choose from."""
     global CURRENT_PHONE_ABILITY
     
-    available_abilities = get_available_phone_abilities()
+    available_abilities = get_phone_ability_options()
 
     print("\n" + "="*50)
     print(f"📞 PHONE ABILITIES - Choose one (Upgrade level {PHONE_UPGRADE_LEVEL}):")
@@ -717,7 +732,7 @@ class Board:
     # SPIN
     # --------------------------------------------------------
 
-    def current_spin(self, symbol_classes, weights, owned_charms, active_bonuses):
+    def current_spin(self, symbol_classes, weights, owned_charms, active_bonuses, spin_number=None):
         """
         Perform a new spin:
           - Apply pending bonuses
@@ -728,44 +743,59 @@ class Board:
 
         self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]
         self.fill_cells(symbol_classes, weights, owned_charms, active_bonuses)
-        self.print_board()
+        self.print_board(spin_number=spin_number)
         sleep(1)
 
     # --------------------------------------------------------
     # PRINT BOARD
     # --------------------------------------------------------
 
-    def print_board(self, pattern_cells=None):
+    def print_board(self, pattern_cells=None, pattern_score=None, spin_number=None):
+        print(ANSI_CLEAR_SCREEN, end="")
+        sleep(0.25)
+
+        if spin_number is not None:
+            print(f"--- SPIN {spin_number} ---")
         print("\n=== BOARD ===")
 
         highlighted_cells = set()
+        score_row = None
         if pattern_cells:
             highlighted_cells = {
                 (x, y)
                 for _, cells in pattern_cells
                 for x, y in cells
             }
+            if pattern_score is not None:
+                for x, cells in pattern_cells:
+                    if cells:
+                        score_row = min(x for x, _ in cells)
+                        break
 
         for x, row in enumerate(self.grid):
             row_cells = []
             for y, s in enumerate(row):
-                cell_text = s.display_name
+                cell_text = f"{s.display_name:14}"
                 if (x, y) in highlighted_cells:
-                    cell_text = f"({cell_text})"
-                row_cells.append(f"{cell_text:14}")
-            print(" | ".join(row_cells))
+                    cell_text = f"{ANSI_RED}{cell_text}{ANSI_RESET}"
+                row_cells.append(cell_text)
+
+            line = " | ".join(row_cells)
+            if score_row == x and pattern_score is not None:
+                line = f"{line}    Score: {pattern_score}"
+            print(line)
 
         print("=============")
 
         if pattern_cells:
-            sleep(2)
+            sleep(1)
         print()
 
     # --------------------------------------------------------
     # SCORING
     # --------------------------------------------------------
 
-    def display_total(self, owned_charms):
+    def display_total(self, owned_charms, spin_number=None):
         """
         Score all patterns:
           - Detect matches
@@ -836,11 +866,9 @@ class Board:
         has_gold_rush = has_charm(owned_charms, "Gold Rush")
 
         for pattern, cells in chosen:
-            print(f"\nPattern: {pattern.name}")
-            self.print_board(pattern_cells=[(pattern.name, cells)])
-
             pattern_sum = sum(self.grid[x][y].current_value for x, y in cells)
             pattern_score = pattern.get_multiplier(pattern_sum) * triggers
+            self.print_board(pattern_cells=[(pattern.name, cells)], pattern_score=pattern_score, spin_number=spin_number)
             total += pattern_score
 
             if has_gold_rush:
@@ -875,10 +903,10 @@ class Board:
         # ----------------------------------------------------
         total_matches = patterns_this_spin * triggers
         print("\n=========================")
-        print(f"Total Matches: {patterns_this_spin} patterns * {triggers} triggers = {total_matches}")
+        print(f"Total Matches: {total_matches}")
         print(f"Total Value: {total}")
         print("=========================\n")
-
+        sleep(1)
         self.grand_total += total
         self.patterns_scored_this_spin = total_matches
         return total
@@ -984,13 +1012,6 @@ GoldenCards = Charm(
 # CHARM DEFINITIONS - UNCOMMON TIER (30% spawn rate base)
 # ============================================================
 
-# Manifestation charms
-ManifestationCharm = Charm(
-    "Manifestation",
-    "Average +2 extra of a chosen symbol type for the rest of the deadline",
-    kind="manifestation",
-    rarity="uncommon"
-)
 
 # Extra spin charm
 Spare_Change = Charm(
@@ -1372,7 +1393,6 @@ ALL_CHARMS = [
     GoldenWheels, GoldenDice, GoldenCoins, GoldenSpinners, GoldenCards,
     
     # Uncommon
-    ManifestationCharm,
     Spare_Change,
     Struck_Gold, Trick_Deck, ILoveTops, Dice_Hard, WheelOfFortune,
     
@@ -1399,6 +1419,40 @@ ALL_CHARMS = [
     THEWORLDENDER, EssenceOfGods,
 ]
 
+ALL_OBTAINABLE_CHARMS_LIST = [
+    # Common
+    Tomato, Peach,
+    GoldenWheels, GoldenDice, GoldenCoins, GoldenSpinners, GoldenCards,
+    
+    # Uncommon
+    Spare_Change,
+    Struck_Gold, Trick_Deck, ILoveTops, Dice_Hard, WheelOfFortune,
+    
+    # Rare
+    ImBadAtMath,
+    Score5Patterns, NoPatternBoost,
+    EarningsMultUp, SymbolsMultUp, PatternsMultScaling,
+    NO_CHANGE, CoinExtraTrigger,
+]
+
+ALL_OBTAINABLE_LOCKED = [
+    CCHARM, ProtestingCall,
+    WorldRecordPepper, GiantPeach, LargestTomato,
+    PSA15, Flowers,
+    INeedToStopWinning, GoldRush,
+]
+
+
+def get_all_obtainable_charms(crafted_recipes=None):
+    """Return the charms that can appear in the store.
+
+    Legendary charms are only available after crafting Charm Upgrade.
+    Exotic and transcendent charms are never available in the store.
+    """
+    obtainable = list(ALL_OBTAINABLE_CHARMS_LIST)
+    if crafted_recipes and "Charm Upgrade" in crafted_recipes:
+        obtainable += list(ALL_OBTAINABLE_LOCKED)
+    return obtainable
 
 # ============================================================
 # CHARM HELPERS
@@ -1541,15 +1595,13 @@ def store_phase(money, owned_charms, crafted_recipes):
     print("\nWelcome to the store.")
     print(f"You have ${money}. Charms cost $5 each.")
 
-    # Filter out charms already owned AND exotic charms (only from phone abilities).
+    # Filter out charms already owned.
     # Legendary charms become available only after crafting Charm Upgrade.
-    can_sell_legendary = "Charm Upgrade" in crafted_recipes
+    available_chars = get_all_obtainable_charms(crafted_recipes)
     available = [
-        c for c in ALL_CHARMS 
+        c for c in available_chars
         if c not in [d['charm'] for d in owned_charms]
-        and c.rarity != "exotic"
         and c.name != "THE WORLD ENDER"
-        and (can_sell_legendary or c.rarity != "legendary")
     ]
 
     if not available:
@@ -1899,9 +1951,8 @@ def main():
 
         # Perform spins
         for i in range(spins):
-            print(f"\n--- SPIN {i+1} ---")
-            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms, active_bonuses)
-            board.display_total(owned_charms)
+            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms, active_bonuses, spin_number=i+1)
+            board.display_total(owned_charms, spin_number=i+1)
             patterns_scored_this_round += board.patterns_scored_this_spin
 
             if spins != 0 and has_available_cooldown_charms(owned_charms):
