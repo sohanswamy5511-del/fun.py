@@ -652,6 +652,7 @@ class Board:
             )
 
             print(f"Delayed bonus applied! All {stype.__name__}s gain +{inc} permanently.")
+            sleep(.3)
 
         # Remove applied bonuses
         self.delayed_bonuses = [b for b in self.delayed_bonuses if b["delay"] > 0]
@@ -752,7 +753,7 @@ class Board:
         self.fill_cells(symbol_classes, weights, owned_charms, active_bonuses)
         self.apply_luck_manifestation(spin_luck)
         self.print_board(spin_number=spin_number)
-        sleep(1)
+        sleep(0.1)
 
     def apply_luck_manifestation(self, luck_amount):
         """Ensure the board contains at least luck_amount of one symbol type."""
@@ -799,11 +800,11 @@ class Board:
 
     def print_board(self, pattern_cells=None, pattern_score=None, spin_number=None):
         print(ANSI_CLEAR_SCREEN, end="")
-        sleep(0.25)
+        sleep(0.05)
 
         if spin_number is not None:
+            print()
             print(f"--- SPIN {spin_number} ---")
-            sleep(0.25)
         print("\n=== BOARD ===")
 
         highlighted_cells = set()
@@ -834,10 +835,9 @@ class Board:
             print(line)
 
         print("=============")
-        sleep(0.25)
-
+        sleep(.3)
         if pattern_cells:
-            sleep(.5)
+            sleep(.3)
         print()
 
     # --------------------------------------------------------
@@ -945,6 +945,7 @@ class Board:
                     print(
                         f"Golden modifier queued! A delayed +{total_increase} bonus for all {stype.__name__}s has been queued for the next spin."
                     )
+                    sleep(0.5)
 
             # Append this scored pattern to processed list and handle Gold Rush
             processed_patterns.append((pattern, cells))
@@ -971,7 +972,7 @@ class Board:
                         self.global_symbol_bonuses[stype] = self.global_symbol_bonuses.get(stype, 0) + inc
                         print(f"  +{inc} permanently applied to all {stype.__name__}s")
 
-            sleep(1.5)
+            sleep(0.25)
 
         # ----------------------------------------------------
         # UPDATE DELAYED BONUSES
@@ -987,7 +988,7 @@ class Board:
         print(f"Total Matches: {total_matches}")
         print(f"Total Value: {total}")
         print("=========================\n")
-        sleep(1)
+        sleep(.3)
         self.grand_total += total
         self.patterns_scored_this_spin = total_matches
         return total
