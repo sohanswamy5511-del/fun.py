@@ -35,7 +35,7 @@ PHONE_ABILITIES = [
     {"num": 3, "name": "Restore charges on cooldown charms", "rarity": "common", "desc": "Reset all charm cooldowns"},
     
     # UNCOMMON TIER (30% base, 60% upgrade 1, 40% upgrade 2, 0% upgrade 3)
-    {"num": 4, "name": "+2 manifestation for a symbol", "rarity": "uncommon", "desc": "Average +2 extra of one symbol type for the rest of the deadline"},
+    {"num": 4, "name": "+1 manifestation for a symbol", "rarity": "uncommon", "desc": "Average +1 extra of one symbol type, permanently"},
     {"num": 5, "name": "Add a random trait to a charm", "rarity": "uncommon", "desc": "Enhance a charm with a trait"},
     {"num": 6, "name": "+1 charm space", "rarity": "uncommon", "desc": "Gain an extra charm slot"},
     
@@ -1149,6 +1149,86 @@ WheelOfFortune = Charm(
     rarity="uncommon"
 )
 
+SymbolBoost = Charm(
+    "Symbol Boost",
+    "Increase a chosen symbol's xmult by +1",
+    kind="symbol_mult_basic",
+    amount=1,
+    rarity="uncommon"
+)
+
+SymbolSurge = Charm(
+    "Symbol Surge",
+    "Increase a chosen symbol's xmult by +2",
+    kind="symbol_mult_basic",
+    amount=2,
+    rarity="uncommon"
+)
+
+CharmPocket = Charm(
+    "Charm Pocket",
+    "+1 charm space (doesn't take space)",
+    kind="charm_space",
+    amount=1,
+    rarity="uncommon"
+)
+
+CharmSatchel = Charm(
+    "Charm Satchel",
+    "+2 charm space",
+    kind="charm_space",
+    amount=2,
+    rarity="uncommon"
+)
+
+Blueprint = Charm(
+    "Blueprint",
+    "Gain the same effect as the last bought charm",
+    kind="blueprint",
+    rarity="uncommon"
+)
+
+CharmLocker = Charm(
+    "Charm Locker",
+    "Store a charm when bought or sold and recover it later",
+    kind="storage",
+    rarity="uncommon"
+)
+
+LeftWing = Charm(
+    "Left Wing",
+    "Reuse the effect of the first charm you sold",
+    kind="left_wing",
+    rarity="uncommon"
+)
+
+I_cant_stop_winning = Charm(
+    "I can't stop winning",
+    "13% chance for Wheel and Card to spawn with PATTERN modifier",
+    kind="pattern_modifier",
+    target=(Wheel, Card),
+    amount=13,
+    rarity="uncommon"
+)
+
+ReRetrigger = Charm(
+    "Re-Retrigger",
+    "5% chance for Dice to spawn with RECHARGE modifier",
+    kind="recharge_modifier",
+    target=Dice,
+    amount=5,
+    rarity="uncommon"
+)
+
+AGAINAGAINAGAIN = Charm(
+    "AGAINAGAINAGAIN",
+    "15% chance for Coin and Spinner to spawn with REPETITION modifier",
+    kind="repetition_modifier",
+    target=(Coin, Spinner),
+    amount=15,
+    rarity="uncommon"
+)
+
 # ============================================================
 # CHARM DEFINITIONS - RARE TIER (20% spawn rate base)
 # ============================================================
@@ -1481,6 +1561,9 @@ ALL_CHARMS = [
     # Uncommon
     Spare_Change,
     Struck_Gold, Trick_Deck, ILoveTops, Dice_Hard, WheelOfFortune,
+    SymbolBoost, SymbolSurge,
+    CharmPocket, CharmSatchel, Blueprint, CharmLocker, LeftWing,
+    I_cant_stop_winning, ReRetrigger, AGAINAGAINAGAIN,
     
     # Rare
     ImBadAtMath,
@@ -1513,6 +1596,9 @@ ALL_OBTAINABLE_CHARMS_LIST = [
     # Uncommon
     Spare_Change,
     Struck_Gold, Trick_Deck, ILoveTops, Dice_Hard, WheelOfFortune,
+    SymbolBoost, SymbolSurge,
+    CharmPocket, CharmSatchel, Blueprint, CharmLocker, LeftWing,
+    I_cant_stop_winning, ReRetrigger, AGAINAGAINAGAIN,
     
     # Rare
     ImBadAtMath,
