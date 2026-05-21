@@ -189,8 +189,12 @@ class Symbol:
     def apply_golden_modifier(self):
         """
         Golden modifier effect:
-        When a golden symbol scores, it gains +base_value.
-        This is applied during scoring, not here.
+        For every symbol with the GOLD modifier that is scored in a pattern,
+        the symbol's type gains +base_value permanently (applied next spin).
+        Only one GOLD symbol is needed in a pattern to trigger this for its
+        symbol type; multiple GOLD symbols in the same pattern stack.
+        Retriggers multiply the total amount queued (i.e., multiplied by
+        the number of triggers).
         """
         pass
 
@@ -636,6 +640,9 @@ class Board:
         """
         to_apply = [b for b in self.delayed_bonuses if b["delay"] <= 0]
 
+        if to_apply:
+            print("Applying delayed bonuses for this spin...")
+
         for bonus in to_apply:
             stype = bonus["symbol_type"]
             inc = bonus["increase"]
@@ -732,7 +739,7 @@ class Board:
     # SPIN
     # --------------------------------------------------------
 
-    def current_spin(self, symbol_classes, weights, owned_charms, active_bonuses, spin_number=None):
+    def current_spin(self, symbol_classes, weights, owned_charms, active_bonuses, spin_luck, spin_number=None):
         """
         Perform a new spin:
           - Apply pending bonuses
@@ -743,8 +750,48 @@ class Board:
 
         self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]
         self.fill_cells(symbol_classes, weights, owned_charms, active_bonuses)
+        self.apply_luck_manifestation(spin_luck)
         self.print_board(spin_number=spin_number)
         sleep(1)
+
+    def apply_luck_manifestation(self, luck_amount):
+        """Ensure the board contains at least luck_amount of one symbol type."""
+        if luck_amount <= 1:
+            return
+
+        desired = min(luck_amount, self.rows * self.cols)
+        counts = {}
+        for x in range(self.rows):
+            for y in range(self.cols):
+                symbol = self.grid[x][y]
+                symbol_type = type(symbol)
+                counts[symbol_type] = counts.get(symbol_type, 0) + 1
+
+        if not counts:
+            return
+
+        target_type = max(counts.keys(), key=lambda t: (counts[t], t().base_value))
+        current_count = counts[target_type]
+
+        if current_count >= desired:
+            return
+
+        needed = desired - current_count
+        candidates = [
+            (x, y) for x in range(self.rows) for y in range(self.cols)
+            if type(self.grid[x][y]) != target_type
+        ]
+        random.shuffle(candidates)
+
+        for x, y in candidates[:needed]:
+            symbol = target_type()
+            bonus = self.global_symbol_bonuses.get(target_type, 0)
+            if bonus:
+                symbol.current_value += bonus
+            symbol.activate()
+            self.grid[x][y] = symbol
+
+        print(f"Luck forced {desired}x {target_type.__name__} on board (luck={luck_amount}).")
 
     # --------------------------------------------------------
     # PRINT BOARD
@@ -756,6 +803,7 @@ class Board:
 
         if spin_number is not None:
             print(f"--- SPIN {spin_number} ---")
+            sleep(0.25)
         print("\n=== BOARD ===")
 
         highlighted_cells = set()
@@ -786,9 +834,10 @@ class Board:
             print(line)
 
         print("=============")
+        sleep(0.25)
 
         if pattern_cells:
-            sleep(1)
+            sleep(.5)
         print()
 
     # --------------------------------------------------------
@@ -865,30 +914,62 @@ class Board:
 
         has_gold_rush = has_charm(owned_charms, "Gold Rush")
 
+        processed_patterns = []
+
         for pattern, cells in chosen:
             pattern_sum = sum(self.grid[x][y].current_value for x, y in cells)
             pattern_score = pattern.get_multiplier(pattern_sum) * triggers
             self.print_board(pattern_cells=[(pattern.name, cells)], pattern_score=pattern_score, spin_number=spin_number)
             total += pattern_score
+            # ------------------------------------------------
+            # GOLDEN MODIFIER: base behavior (without Gold Rush charm)
+            # For every GOLD symbol in the scored pattern, queue a delayed
+            # permanent bonus of +base_value for that symbol type. Multiple
+            # GOLD symbols stack; retriggers multiply the total queued amount.
+            # The queued bonuses are applied at the start of the next spin.
+            # ------------------------------------------------
+            golden_symbols = [self.grid[x][y] for x, y in cells if self.grid[x][y].is_golden]
+            if golden_symbols:
+                pending_increases = {}
+                for s in golden_symbols:
+                    stype = type(s)
+                    pending_increases[stype] = pending_increases.get(stype, 0) + s.base_value
 
-            if has_gold_rush:
-                golden_symbols = [self.grid[x][y] for x, y in cells if self.grid[x][y].is_golden]
-                if golden_symbols:
-                    pending_increases = {}
-                    for s in golden_symbols:
-                        stype = type(s)
-                        pending_increases[stype] = pending_increases.get(stype, 0) + s.base_value
+                for stype, increase in pending_increases.items():
+                    total_increase = increase * triggers
+                    self.delayed_bonuses.append({
+                        "symbol_type": stype,
+                        "increase": total_increase,
+                        "delay": 1
+                    })
+                    print(
+                        f"Golden modifier queued! A delayed +{total_increase} bonus for all {stype.__name__}s has been queued for the next spin."
+                    )
 
-                    for stype, increase in pending_increases.items():
-                        total_increase = increase * triggers
-                        self.delayed_bonuses.append({
-                            "symbol_type": stype,
-                            "increase": total_increase,
-                            "delay": 1
-                        })
-                        print(
-                            f"Golden symbol bonus queued! A delayed +{total_increase} bonus for all {stype.__name__}s has been queued for the next spin."
-                        )
+            # Append this scored pattern to processed list and handle Gold Rush
+            processed_patterns.append((pattern, cells))
+
+            # Gold Rush special: once at least 10 patterns have been scored in
+            # this spin, each subsequent scored pattern causes the aggregated
+            # GOLD base_values from the previous ten scored patterns to be
+            # immediately applied permanently to their symbol types. This
+            # happens for every pattern after the tenth (inclusive).
+            if has_gold_rush and len(processed_patterns) >= 10:
+                # Use the first ten scored patterns of this spin for aggregation
+                first_ten = processed_patterns[:10]
+                agg = {}
+                for _, pcells in first_ten:
+                    for x, y in pcells:
+                        s = self.grid[x][y]
+                        if s.is_golden:
+                            stype = type(s)
+                            agg[stype] = agg.get(stype, 0) + s.base_value
+
+                if agg:
+                    print("Gold Rush active: applying aggregated bonuses from the first 10 patterns immediately:")
+                    for stype, inc in agg.items():
+                        self.global_symbol_bonuses[stype] = self.global_symbol_bonuses.get(stype, 0) + inc
+                        print(f"  +{inc} permanently applied to all {stype.__name__}s")
 
             sleep(1.5)
 
@@ -1193,7 +1274,11 @@ INeedToStopWinning = Charm(
 
 GoldRush = Charm(
     "Gold Rush",
-    "If >=1 symbol has GOLD modifier, increase its value by base value per trigger, permanently",
+    """Gold Rush: If a spin contains >=10 scored patterns, the aggregated GOLD modifiers
+from the previous ten patterns are immediately added permanently to their symbol types.
+Additionally, GOLD modifiers still queue their normal delayed bonuses (+base_value per
+GOLD symbol, multiplied by retriggers) for the next spin. This makes GOLD modifiers
+far more powerful when many patterns are scored in a single spin.""",
     kind="gold_amplifier",
     rarity="legendary"
 )
@@ -1494,6 +1579,26 @@ def compute_weight_overrides(symbol_classes, active_bonuses, owned_charms=None):
             weights[cls] = weights[cls] * 100 / total
 
     return weights
+
+
+def compute_spin_luck(owned_charms, board):
+    """Compute effective luck for the upcoming spin.
+
+    Without luck charms, luck is a random value from 1 to 4. Luck charms
+    increase this initial value by their amount. Passive luck bonuses from
+    other effects are also applied.
+    """
+    effects = apply_charm_effects(owned_charms, board)
+    initial_luck = random.randint(1, 4)
+    bonus_luck = int(effects.get('luck_bonus', 0))
+
+    for d in owned_charms:
+        charm = d['charm']
+        if charm.kind == 'luck':
+            bonus_luck += charm.amount
+
+    total_luck = max(1, initial_luck + bonus_luck)
+    return total_luck
 
 
 def has_available_cooldown_charms(owned_charms):
@@ -1945,13 +2050,15 @@ def main():
                 d['cooldown'] -= 1
             d['activations_this_round'] = 0
 
+        # Compute spin luck and use it during board creation
+        spin_luck = compute_spin_luck(owned_charms, board)
         weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses, owned_charms)
         board.grand_total = 0
         patterns_scored_this_round = 0  # Track total patterns for conditional charms
 
         # Perform spins
         for i in range(spins):
-            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms, active_bonuses, spin_number=i+1)
+            board.current_spin(BASE_SYMBOL_CLASSES, weight_overrides, owned_charms, active_bonuses, spin_luck, spin_number=i+1)
             board.display_total(owned_charms, spin_number=i+1)
             patterns_scored_this_round += board.patterns_scored_this_spin
 
@@ -1975,6 +2082,9 @@ def main():
             # LargestTomato: 50+ patterns = exponential doubling
             if patterns_this_spin >= 50 and has_charm(owned_charms, "The Largest Tomato Ever"):
                 print("🍅 THE LARGEST TOMATO EVER TRIGGERED! Values multiplying exponentially!")
+
+            if i + 1 < spins:
+                input("Press Enter to spin again...")
 
         # Decrement round after all spins are completed
         deadlines.decrement_round()
