@@ -776,6 +776,7 @@ class Board:
         battery_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "battery_modifier")
         repetition_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "repetition_modifier")
         symbol_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "symbol_modifier_chance")
+        chain_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "chain_modifier_chance")
         pattern_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "pattern_modifier_chance")
         mimic_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "mimic_modifier_chance")
         fusion_amplifier_bonus = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "fusion_amplifier")
@@ -809,7 +810,8 @@ class Board:
 
                     if pattern_modifier_chance and random.randint(1, 100) <= pattern_modifier_chance:
                         symbol.modifiers.append("pattern_mult")
-                        symbol.display_name += " [PATTERN]"
+                        # Pattern multiplier modifiers will be applied during pattern scoring
+                        symbol.display_name += " [PATTERN]"   
 
                     if mimic_modifier_chance and random.randint(1, 100) <= mimic_modifier_chance:
                         symbol.modifiers.append("mimic")
@@ -817,13 +819,25 @@ class Board:
 
                     # Random battery/repeat modifiers from owned charms
                     if battery_chance and random.randint(1, 100) <= battery_chance:
-                        symbol.current_value += 1
+                        if any(d['charm'].amount for d in owned_charms if d['charm'].kind == "battery_modifier"):
+                            symbol.modifiers.append("recharge")
                         symbol.display_name += " [RECHARGE]"
+                    
+                    
+                    if chain_modifier_chance and random.randint(1, 100) <= chain_modifier_chance:
+                        symbol.modifiers.append("chain")
+                        symbol.display_name += " [CHAIN]"
 
                     if repetition_chance and random.randint(1, 100) <= repetition_chance:
-                        symbol.current_value *= 1.2
-                        symbol.display_name += " [REPEAT]"
-
+                        if any(d['charm'].amount for d in owned_charms if d['charm'].kind == "repetition_modifier"):
+                            if isinstance(symbol, Coin, Spinner) and has_AGAINGAGAINAGAIN:
+                                pattern.is_repeated = True
+                                symbol.display_name += " [REPEAT]"
+                        else:
+                            pattern.is_repeated = True
+                            symbol.display_name += " [REPEAT]"
+                    else:
+                        pattern.is_repeated = False
                     # Golden modifier chance
                     if isinstance(symbol, Coin) and has_golden_coins:
                         if random.randint(1, 100) <= 25:
@@ -1558,8 +1572,8 @@ TakeSpace = Charm(
 
 I_cant_stop_winning = Charm(
     "I can't stop winning",
-    "13% chance for Wheel and Card to have the pattern modifier (pattern modifier increases the pattern scored's value by its base value)",
-    kind="pattern_modifier",
+    "13% chance for Wheel and Card to have the blue modifier (blue modifier increases the pattern scored's value by its base value)",
+    kind="blue_modifier",
     target=(Wheel, Card),
     amount=13,
     rarity="uncommon"
