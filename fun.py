@@ -773,6 +773,7 @@ class Board:
         has_golden_spinners = any('gold' in str(d['charm'].kind) and d['charm'].target is Spinner for d in owned_charms)
         has_golden_cards = any('gold' in str(d['charm'].kind) and d['charm'].target is Card for d in owned_charms)
         has_golden_wheels = any('gold' in str(d['charm'].kind) and d['charm'].target is Wheel for d in owned_charms)
+        has_AGAINAGAINAGAIN = any('repetition' in str (d['charm'].kind) and d['charm'].target is Coin or Spinner for d in owned_charms)
         battery_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "battery_modifier")
         repetition_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "repetition_modifier")
         symbol_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "symbol_modifier_chance")
@@ -830,14 +831,19 @@ class Board:
 
                     if repetition_chance and random.randint(1, 100) <= repetition_chance:
                         if any(d['charm'].amount for d in owned_charms if d['charm'].kind == "repetition_modifier"):
-                            if isinstance(symbol, Coin, Spinner) and has_AGAINGAGAINAGAIN:
-                                pattern.is_repeated = True
-                                symbol.display_name += " [REPEAT]"
-                        else:
-                            pattern.is_repeated = True
+                            pattern_is_repeated == True
                             symbol.display_name += " [REPEAT]"
                     else:
-                        pattern.is_repeated = False
+                        pattern_is_repeated == False
+                    
+                    if isinstance(symbol, Coin) and has_AGAINGAGAINAGAIN:
+                        if repetition_chance and random.randint(1, 100) <= repetition_chance:
+                            pattern_is_repeated = True
+                            symbol.display_name += " [REPEAT]"
+                    elif isinstance(symbol, Spinner) and has_AGAINGAGAINAGAIN:
+                        pattern_is_repeated = True
+                        symbol.display_name += " [REPEAT]"
+
                     # Golden modifier chance
                     if isinstance(symbol, Coin) and has_golden_coins:
                         if random.randint(1, 100) <= 25:
@@ -1079,6 +1085,9 @@ class Board:
                         retrigger_sources.append("Lucky Coin Math")
                         break
         
+        if pattern_is_repeated == True:
+            retrigger_count += 1
+            retrigger_sources.append("Repetition Modifier")
         triggers = 1 + retrigger_count
 
         if retrigger_count > 0:
