@@ -509,8 +509,8 @@ class Spoon(Pattern):
     def matches(self, board):
         """
         Custom override:
-          - Formation 0 = relative
-          - Formation 1 = absolute
+          - Formation 0 = relative (Spoon A)
+          - Formation 1 = absolute (Spoon B)
         """
         rows = len(board)
         cols = len(board[0])
@@ -567,6 +567,44 @@ class Spoon(Pattern):
 
         return found
 
+class XPattern(Pattern):
+    def __init__(self):
+        super().__init__(
+            "X Pattern",
+            formations=[
+                [(0, 0), (0, 1), (0, 3), (0, 4),
+                (1, 1), (1, 2), (1, 3),
+                 (2, 0), (2, 1), (2, 3), (2, 4)]
+            ],
+            base_multiplier_value=7,
+            absolute=True
+        )
+
+class NPatternA(Pattern):
+    def __init__(self):
+        super().__init__(
+            "N Pattern A",
+            formations=[
+                [(0, 0), (0, 3), (0, 4),
+                 (1, 0), (1, 1), (1, 2), (1, 3), (1, 4),
+                 (2, 0), (2, 1), (2, 4)]
+            ],
+            base_multiplier_value=8,
+            absolute=True
+        )
+
+class NPatternB(Pattern):
+    def __init__(self):
+        super().__init__(
+            "N Pattern B",
+            formations=[
+                [(0, 0), (0, 1), (0, 4),
+                 (1, 0), (1, 1), (1, 2), (1, 3), (1, 4),
+                 (2, 0), (2, 3), (2, 4)]
+            ],
+            base_multiplier_value=8,
+            absolute=True
+        )
 
 # ============================================================
 # JACKPOT PATTERN
@@ -592,6 +630,9 @@ PATTERNS = [
     HorizontalLineLarge(),
     HorizontalLineXL(),
     Spoon(),
+    NPatternA(),
+    NPatternB(),
+    XPattern(),
     Jackpot()
 ]
 
@@ -619,6 +660,7 @@ class Board:
 
         # Permanent bonuses applied to all symbols of a type
         self.global_symbol_bonuses = {}  # {SymbolClass: int}
+        self.round_symbol_bonuses = {}   # {SymbolClass: int}
 
         # Delayed bonuses (stacking)
         self.delayed_bonuses = []  # list of dicts:
@@ -658,6 +700,57 @@ class Board:
         self.delayed_bonuses = [b for b in self.delayed_bonuses if b["delay"] > 0]
 
     # --------------------------------------------------------
+    # START ROUND
+    # --------------------------------------------------------
+
+    def start_round(self):
+        """Reset round-scoped fusion modifier effects."""
+        self.round_symbol_bonuses = {}
+        for pattern in PATTERNS:
+            pattern.current_multiplier_value = pattern.base_multiplier_value
+
+    def get_modifier_rarity_rank(self, modifiers):
+        """Return a rarity rank for a set of modifiers."""
+        rank_map = {
+            "gold": 5,
+            "recharge": 4,
+            "repetition": 3,
+            "pattern_mult": 2,
+            "symbol_mult": 1,
+            "mimic": 0
+        }
+        return max((rank_map.get(mod, 0) for mod in modifiers), default=0)
+
+    def apply_mimic_modifier(self, symbol, x, y):
+        """Copy the nearest modifier from an existing symbol on the board."""
+        best_source = None
+        best_distance = None
+        best_rank = -1
+
+        for i in range(self.rows):
+            for j in range(self.cols):
+                candidate = self.grid[i][j]
+                if candidate is None or candidate is symbol:
+                    continue
+                candidate_mods = [m for m in candidate.modifiers if m != "mimic"]
+                if not candidate_mods:
+                    continue
+
+                distance = abs(x - i) + abs(y - j)
+                rank = self.get_modifier_rarity_rank(candidate_mods)
+
+                if best_source is None or distance < best_distance or (distance == best_distance and rank > best_rank):
+                    best_source = candidate
+                    best_distance = distance
+                    best_rank = rank
+
+        if best_source:
+            copied_mods = [m for m in best_source.modifiers if m != "mimic"]
+            symbol.modifiers.extend(copied_mods)
+            if copied_mods:
+                symbol.display_name += " [MIMIC:" + ",".join(copied_mods) + "]"
+
+    # --------------------------------------------------------
     # FILL BOARD WITH SYMBOLS
     # --------------------------------------------------------
 
@@ -674,14 +767,23 @@ class Board:
         # Build weights list in order
         weights_list = [weights[cls] for cls in symbol_classes]
 
-        # Check charms
-        has_golden_coins = any(d['charm'].kind == "modifier" and d['charm'].target is Coin for d in owned_charms)
-        has_golden_dice = any(d['charm'].kind == "modifier" and d['charm'].target is Dice for d in owned_charms)
-        has_golden_spinners = any(d['charm'].kind == "modifier" and d['charm'].target is Spinner for d in owned_charms)
-        has_golden_cards = any(d['charm'].kind == "modifier" and d['charm'].target is Card for d in owned_charms)
-        has_golden_wheels = any(d['charm'].kind == "modifier" and d['charm'].target is Wheel for d in owned_charms)
+        # Check charms: detect any charm whose kind mentions 'gold' for GOLD modifiers
+        has_golden_coins = any('gold' in str(d['charm'].kind) and d['charm'].target is Coin for d in owned_charms)
+        has_golden_dice = any('gold' in str(d['charm'].kind) and d['charm'].target is Dice for d in owned_charms)
+        has_golden_spinners = any('gold' in str(d['charm'].kind) and d['charm'].target is Spinner for d in owned_charms)
+        has_golden_cards = any('gold' in str(d['charm'].kind) and d['charm'].target is Card for d in owned_charms)
+        has_golden_wheels = any('gold' in str(d['charm'].kind) and d['charm'].target is Wheel for d in owned_charms)
         battery_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "battery_modifier")
         repetition_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "repetition_modifier")
+        symbol_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "symbol_modifier_chance")
+        pattern_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "pattern_modifier_chance")
+        mimic_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "mimic_modifier_chance")
+        fusion_amplifier_bonus = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "fusion_amplifier")
+        modifier_chance_bonus = get_modifier_chance_bonus(owned_charms)
+
+        symbol_modifier_chance += modifier_chance_bonus + fusion_amplifier_bonus
+        pattern_modifier_chance += modifier_chance_bonus + fusion_amplifier_bonus
+        mimic_modifier_chance += max(0, modifier_chance_bonus // 2) + fusion_amplifier_bonus // 2
 
         for x in range(self.rows):
             for y in range(self.cols):
@@ -691,13 +793,27 @@ class Board:
                     symbol_class = random.choices(symbol_classes, weights=weights_list, k=1)[0]
                     symbol = symbol_class()
 
-                    # Apply permanent global bonus
-                    bonus = self.global_symbol_bonuses.get(symbol_class, 0)
+                    # Apply permanent and round-scoped global bonuses
+                    bonus = self.global_symbol_bonuses.get(symbol_class, 0) + self.round_symbol_bonuses.get(symbol_class, 0)
                     if bonus:
                         symbol.current_value += bonus
 
                     # Activate (roll/spin/draw)
                     symbol.activate()
+
+                    # Fusion modifiers can attach to symbols
+                    if symbol_modifier_chance and random.randint(1, 100) <= symbol_modifier_chance:
+                        symbol.modifiers.append("symbol_mult")
+                        symbol.current_value += symbol.base_value
+                        symbol.display_name += " [SYMBOL]"
+
+                    if pattern_modifier_chance and random.randint(1, 100) <= pattern_modifier_chance:
+                        symbol.modifiers.append("pattern_mult")
+                        symbol.display_name += " [PATTERN]"
+
+                    if mimic_modifier_chance and random.randint(1, 100) <= mimic_modifier_chance:
+                        symbol.modifiers.append("mimic")
+                        self.apply_mimic_modifier(symbol, x, y)
 
                     # Random battery/repeat modifiers from owned charms
                     if battery_chance and random.randint(1, 100) <= battery_chance:
@@ -786,7 +902,7 @@ class Board:
 
         for x, y in candidates[:needed]:
             symbol = target_type()
-            bonus = self.global_symbol_bonuses.get(target_type, 0)
+            bonus = self.global_symbol_bonuses.get(target_type, 0) + self.round_symbol_bonuses.get(target_type, 0)
             if bonus:
                 symbol.current_value += bonus
             symbol.activate()
@@ -895,16 +1011,65 @@ class Board:
 
         # ----------------------------------------------------
         # RETRIGGER LOGIC
-        # Each retrigger charm has a 35% chance to trigger
+        # Multiple charm types can trigger pattern retriggering
+        # Each charm has its own activation conditions
         # ----------------------------------------------------
         retrigger_count = 0
+        retrigger_sources = []
+        
+        # I'm Bad at Math: 35% chance to trigger
         for d in owned_charms:
-            if d['charm'].kind == "retrigger" and random.randint(1, 100) <= 35:
+            if d['charm'].kind == "retrigger" and d['charm'].name != "Pattern Pulse" and d['charm'].name != "Lucky Coin Math" and random.randint(1, 100) <= 35:
                 retrigger_count += 1
+                retrigger_sources.append("I'm Bad at Math")
+        
+        # NOCHANGE: Patterns with non-Coin symbols trigger once more (cooldown 4)
+        for d in owned_charms:
+            if d['charm'].name == "NOCHANGE" and d['cooldown'] == 0:
+                # Check if any pattern has non-Coin symbols
+                for pattern, cells in chosen:
+                    has_non_coin = any(not isinstance(self.grid[x][y], Coin) for x, y in cells)
+                    if has_non_coin:
+                        retrigger_count += 1
+                        retrigger_sources.append("NOCHANGE")
+                        d['cooldown'] = d['charm'].cooldown_rounds
+                        break
+        
+        # Coin Rush: Patterns with only Coins trigger two more times (cooldown 5)
+        for d in owned_charms:
+            if d['charm'].name == "Coin Rush" and d['cooldown'] == 0:
+                # Check if any pattern has only Coin symbols
+                for pattern, cells in chosen:
+                    all_coins = all(isinstance(self.grid[x][y], Coin) for x, y in cells)
+                    if all_coins:
+                        retrigger_count += 2
+                        retrigger_sources.append("Coin Rush")
+                        d['cooldown'] = d['charm'].cooldown_rounds
+                        break
+        
+        # Pattern Pulse: 70% chance to trigger once more if 10+ patterns this spin
+        if len(chosen) >= 10:
+            for d in owned_charms:
+                if d['charm'].name == "Pattern Pulse" and random.randint(1, 100) <= 70:
+                    retrigger_count += 1
+                    retrigger_sources.append("Pattern Pulse")
+                    break
+        
+        # Lucky Coin Math: 30% chance to trigger once more if pattern contains a Coin
+        for d in owned_charms:
+            if d['charm'].name == "Lucky Coin Math":
+                for pattern, cells in chosen:
+                    has_coin = any(isinstance(self.grid[x][y], Coin) for x, y in cells)
+                    if has_coin and random.randint(1, 100) <= 30:
+                        retrigger_count += 1
+                        retrigger_sources.append("Lucky Coin Math")
+                        break
+        
         triggers = 1 + retrigger_count
 
         if retrigger_count > 0:
-            print("I'm Bad At Math activated! Retriggering patterns...")
+            sources_str = ", ".join(dict.fromkeys(retrigger_sources))  # Remove duplicates while preserving order
+            print(f"✨ {sources_str} activated! Retriggering patterns {retrigger_count} more time(s)...")
             sleep(0.75)
 
         # ----------------------------------------------------
@@ -918,6 +1083,22 @@ class Board:
 
         for pattern, cells in chosen:
             pattern_sum = sum(self.grid[x][y].current_value for x, y in cells)
+
+            # Fusion modifiers: symbol modifiers and pattern modifiers carry through the round.
+            scored_symbols = [self.grid[x][y] for x, y in cells]
+            scored_symbol_types = set(type(s) for s in scored_symbols)
+
+            for sym in scored_symbols:
+                if "symbol_mult" in sym.modifiers:
+                    self.round_symbol_bonuses[type(sym)] = self.round_symbol_bonuses.get(type(sym), 0) + 1
+                    print(f"Symbol modifier triggered: all {type(sym).__name__}s gain +1 multiplier until end of round.")
+                    sleep(0.2)
+
+            if any("pattern_mult" in sym.modifiers for sym in scored_symbols):
+                pattern.current_multiplier_value += 1
+                print(f"Pattern modifier triggered: {pattern.name} multiplier +1 until end of round.")
+                sleep(0.2)
+
             pattern_score = pattern.get_multiplier(pattern_sum) * triggers
             self.print_board(pattern_cells=[(pattern.name, cells)], pattern_score=pattern_score, spin_number=spin_number)
             total += pattern_score
@@ -1004,27 +1185,37 @@ class Charm:
       - extra_spin: +1 max spin per round
       - weight_active: increases spawn weight of a symbol type
       - modifier: chance for symbols to spawn golden
+      - symbol_modifier_chance: chance for symbols to spawn with +1 symbol mult until end round
+      - pattern_modifier_chance: chance for symbols to spawn with +1 pattern mult until end round
+      - mimic_modifier_chance: chance for symbols to spawn with a mimic modifier that copies the nearest modifier
+      - fusion_amplifier: increases fusion modifier chances
       - retrigger: patterns trigger one extra time
       - cooldown: has cooldown-based activation
       - passive: always active
       - trait: applies modifier to other charms
     """
 
-    def __init__(self, name, description, kind, target=None, amount=0, cooldown_rounds=0, rarity="common"):
+    def __init__(self, name, description, kind, target=None, amount=0, cooldown_rounds=0, rarity="common", chance=None, spins=1, max_amount=None):
         self.name = name
         self.description = description
-        self.kind = kind
+        self.kind = kind  # can be a comma-separated string like 'luck,extra_spin'
         self.target = target
         self.amount = amount
         self.cooldown_rounds = cooldown_rounds
         self.rarity = rarity
+        # Optional: activation chance (percentage) for chance-based charms
+        self.chance = chance
+        # Optional: number of spins this charm's luck effect should last when triggered
+        self.spins = spins
+        # Optional: maximum amount (used by some charms)
+        self.max_amount = max_amount
 
     def __str__(self):
         return f"{self.name}: {self.description}"
 
 
 # ============================================================
-# CHARM DEFINITIONS - COMMON TIER (50% spawn rate base)
+# CHARM DEFINITIONS - COMMON TIER (50% spawn rate base) (30% with upgrade)
 # ============================================================
 
 # Luck charms
@@ -1033,6 +1224,7 @@ Tomato = Charm(
     "+3 luck for next spin (17.5% trigger chance)",
     kind="luck",
     amount=3,
+    chance=17.5,
     rarity="common"
 )
 
@@ -1041,6 +1233,7 @@ Peach = Charm(
     "+5 luck for next spin (10% trigger chance)",
     kind="luck",
     amount=5,
+    chance=10,
     rarity="common"
 )
 
@@ -1048,7 +1241,7 @@ Peach = Charm(
 GoldenWheels = Charm(
     "Golden Wheels",
     "25% chance for Wheels to spawn with GOLD modifier",
-    kind="modifier",
+    kind="gold_modifier",
     target=Wheel,
     amount=25,
     rarity="common"
@@ -1057,7 +1250,7 @@ GoldenWheels = Charm(
 GoldenDice = Charm(
     "Golden Dice",
     "20% chance for Dice to spawn with GOLD modifier",
-    kind="modifier",
+    kind="gold_modifier",
     target=Dice,
     amount=20,
     rarity="common"
@@ -1066,7 +1259,7 @@ GoldenDice = Charm(
 GoldenCoins = Charm(
     "Golden Coins",
     "25% chance for Coins to spawn with GOLD modifier",
-    kind="modifier",
+    kind="gold_modifier",
     target=Coin,
     amount=25,
     rarity="common"
@@ -1075,7 +1268,7 @@ GoldenCoins = Charm(
 GoldenSpinners = Charm(
     "Golden Spinners",
     "30% chance for Spinners to spawn with GOLD modifier",
-    kind="modifier",
+    kind="gold_modifier",
     target=Spinner,
     amount=30,
     rarity="common"
@@ -1084,29 +1277,176 @@ GoldenSpinners = Charm(
 GoldenCards = Charm(
     "Golden Cards",
     "25% chance for Cards to spawn with GOLD modifier",
-    kind="modifier",
+    kind="gold_modifier",
     target=Card,
     amount=25,
     rarity="common"
 )
 
+Altered_Coin = Charm(
+    "Altered Coin",
+    "+1 spins_left, +3 luck (cooldown 1) 15% chance for destruction after the fifth use",
+    kind="luck,extra_spin",
+    amount=3,
+    cooldown_rounds=1,
+    rarity="common"
+)
+
+Spoons = Charm(
+    "Spoons",
+    "Whenever you see 3 spins with no patterns of 4+ symbols, the next spin will have one of the spoon patterns",
+    kind="guaranteed_pattern",
+    rarity="common"
+)
+
+X = Charm(
+    "X",
+    "Whenever you don’t see a pattern for 5 spins, the next spin will have an x pattern",
+    kind="guaranteed_pattern",
+    rarity="common"
+)
+
+N = Charm(
+    "N",
+    "Whenever you don’t see a pattern for 4 spins, the next spin will have an N pattern",
+    kind="guaranteed_pattern",
+    rarity="common"
+)
+
+LuckyPenny = Charm(
+    "Lucky Penny",
+    "+5 luck for next spin (12% trigger chance)",
+    kind="luck",
+    amount=5,
+    chance=12,
+    rarity="common"
+)
+
+FortuneCookie = Charm(
+    "Fortune Cookie",
+    "+3 luck for the next two spins (10% trigger chance)",
+    kind="luck",
+    amount=3,
+    chance=10,
+    spins=2,
+    rarity="common"
+)
+
+JadeRabbit = Charm(
+    "Jade Rabbit",
+    "+1 spin_left, +4 luck (16% trigger chance)",
+    kind="extra_spin,luck",
+    amount=4,
+    chance=16,
+    rarity="common"
+)
+
+Cornerstone = Charm(
+    "Cornerstone",
+    "+7 luck for the first spin after buying a charm",
+    kind="luck",
+    amount=7,
+    rarity="common"
+)
+
+NotGreedy = Charm(
+    "Not Greedy",
+    "5% chance for any symbol to spawn with GOLD modifier. Raises by 3% for every round skipped when paying a deadline early",
+    kind="gold_modifier",
+    amount=5,
+    max_amount=25,
+    rarity="common"
+)
+
+LuckyStar = Charm(
+    "Lucky Star",
+    "After scoring 1 pattern in 3 consecutive spins, next spin gains +5 luck",
+    kind="luck",
+    amount=5,
+    rarity="common"
+)
+
+Wishbone = Charm(
+    "Wishbone",
+    "+2 luck next spin; if no patterns appear, gain +5 luck on the following spin",
+    kind="luck",
+    amount=2,
+    rarity="common"
+)
+
+Sunflower = Charm(
+    "Sunflower",
+    "Guarantee a Horizontal Line XL pattern if no pattern appears for 2 spins",
+    kind="guaranteed_pattern",
+    rarity="common"
+)
+
+CatWink = Charm(
+    "Cat Wink",
+    "Guarantee a Vertical Line pattern after 1 scoreless spins",
+    kind="guaranteed_pattern",
+    rarity="common"
+)
+
+Smile = Charm(
+    "Smile",
+    "+3 luck for next spin (cooldown 1)",
+    kind="luck",
+    amount=3,
+    cooldown_rounds=1,
+    rarity="common"
+)
+
+FourLeaf = Charm(
+    "Four Leaf",
+    "+9 luck for next spin (5% trigger chance)",
+    kind="luck",
+    amount=9,
+    chance=5,
+    rarity="common"
+)
+
+OneMoreSpin = Charm(
+    "One More Spin",
+    "+1 max_spins next round (cooldown 3)",
+    kind="extra_spin",
+    cooldown_rounds=2,
+    rarity="common"
+)
+
+PocketRabbit = Charm(
+    "Pocket Rabbit",
+    "+1 luck for every charm bought this deadline, applied next spin",
+    kind="luck",
+    amount=1,
+    rarity="common"
+)
+
+BrokenMirror = Charm(
+    "Broken Mirror",
+    "If you fail to score, next spin gains +4 luck",
+    kind="luck",
+    amount=4,
+    rarity="common"
+)
+
 # ============================================================
-# CHARM DEFINITIONS - UNCOMMON TIER (30% spawn rate base)
+# CHARM DEFINITIONS - UNCOMMON TIER (30% spawn rate base) (33% with upgrade)
 # ============================================================
 
 
 # Extra spin charm
 Spare_Change = Charm(
     "Spare Change",
-    "Gain +1 max spin per round",
-    kind="extra_spin",
+    "+2 max spins",
+    kind="max_spins+",
     rarity="uncommon"
 )
 
 # Weight-active charms (cooldown based)
 Struck_Gold = Charm(
     "Struck Gold",
-    "Activate to increase Coin spawn weight",
+    "+2 avg coin manifestation for the rest of the deadline",
     kind="weight_active",
     target=Coin,
     cooldown_rounds=3,
@@ -1115,7 +1455,7 @@ Struck_Gold = Charm(
 
 Trick_Deck = Charm(
     "Trick Deck",
-    "Activate to increase Card spawn weight",
+    "+2 avg card manifestation for the rest of the deadline",
     kind="weight_active",
     target=Card,
     cooldown_rounds=3,
@@ -1124,7 +1464,7 @@ Trick_Deck = Charm(
 
 ILoveTops = Charm(
     "I Love Tops",
-    "Activate to increase Spinner spawn weight",
+    "+2 avg spinner manifestation for the rest of the deadline",
     kind="weight_active",
     target=Spinner,
     cooldown_rounds=3,
@@ -1133,7 +1473,7 @@ ILoveTops = Charm(
 
 Dice_Hard = Charm(
     "Dice Hard",
-    "Activate to increase Dice spawn weight",
+    "+2 avg dice manifestation for the rest of the deadline",
     kind="weight_active",
     target=Dice,
     cooldown_rounds=3,
@@ -1142,7 +1482,7 @@ Dice_Hard = Charm(
 
 WheelOfFortune = Charm(
     "Wheel of Fortune",
-    "Activate to increase Wheel spawn weight",
+    "+2 avg wheel manifestation for the rest of the deadline",
     kind="weight_active",
     target=Wheel,
     cooldown_rounds=3,
@@ -1152,7 +1492,7 @@ WheelOfFortune = Charm(
 SymbolBoost = Charm(
     "Symbol Boost",
     "Increase a chosen symbol's xmult by +1",
-    kind="symbol_mult_basic",
+    kind="symbol_xmult",
     amount=1,
     rarity="uncommon"
 )
@@ -1160,7 +1500,7 @@ SymbolBoost = Charm(
 SymbolSurge = Charm(
     "Symbol Surge",
     "Increase a chosen symbol's xmult by +2",
-    kind="symbol_mult_basic",
+    kind="symbol_xmult",
     amount=2,
     rarity="uncommon"
 )
@@ -1173,8 +1513,8 @@ CharmPocket = Charm(
     rarity="uncommon"
 )
 
-CharmSatchel = Charm(
-    "Charm Satchel",
+CharmHouse = Charm(
+    "Charm House",
     "+2 charm space",
     kind="charm_space",
     amount=2,
@@ -1184,27 +1524,41 @@ CharmSatchel = Charm(
 Blueprint = Charm(
     "Blueprint",
     "Gain the same effect as the last bought charm",
-    kind="blueprint",
-    rarity="uncommon"
-)
-
-CharmLocker = Charm(
-    "Charm Locker",
-    "Store a charm when bought or sold and recover it later",
-    kind="storage",
+    kind="copy_purchased",
     rarity="uncommon"
 )
 
 LeftWing = Charm(
     "Left Wing",
     "Reuse the effect of the first charm you sold",
-    kind="left_wing",
+    kind="copy_sold",
+    rarity="uncommon"
+)
+
+PhoneReuse = Charm(
+    "Phone Reuse",
+    "When a phone ability is selected, stop it from reappearing. When this charm is thrown away, allow it to be reseen and reuse the phone ability",
+    kind="phone_reuse",
+    rarity="uncommon"
+)
+
+CharmReappear = Charm(
+    "Charm Reappear",
+    "When a charm is thrown away, store it inside this charm. When this charm is thrown away, respawn the thrown away charm on the table",
+    kind="charm_reappear",
+    rarity="uncommon"
+)
+
+TakeSpace = Charm(
+    "Take Space",
+    "When a charm that doesn’t take space is bought, store it inside this charm. Throwing away this charm reuses the charm in question immediately",
+    kind="take_space",
     rarity="uncommon"
 )
 
 I_cant_stop_winning = Charm(
     "I can't stop winning",
-    "13% chance for Wheel and Card to spawn with PATTERN modifier",
+    "13% chance for Wheel and Card to have the pattern modifier (pattern modifier increases the pattern scored's value by its base value)",
     kind="pattern_modifier",
     target=(Wheel, Card),
     amount=13,
@@ -1213,7 +1567,7 @@ I_cant_stop_winning = Charm(
 
 ReRetrigger = Charm(
     "Re-Retrigger",
-    "5% chance for Dice to spawn with RECHARGE modifier",
+    "5% chance for Dice to have the recharge modifier (recharge gives +1 charge on a random cooldown charm)",
     kind="recharge_modifier",
     target=Dice,
     amount=5,
@@ -1222,15 +1576,31 @@ ReRetrigger = Charm(
 
 AGAINAGAINAGAIN = Charm(
     "AGAINAGAINAGAIN",
-    "15% chance for Coin and Spinner to spawn with REPETITION modifier",
+    "15% chance for Coin and Spinner to have the repetition modifier (gives +1 trigger of the pattern with the modifier scored) and does it multiple times every time there is one in a pattern",
     kind="repetition_modifier",
     target=(Coin, Spinner),
     amount=15,
     rarity="uncommon"
 )
 
+LuckyReroll = Charm(
+    "Lucky Reroll",
+    "+1 max spins and +3 luck for first spin of next round",
+    kind="max_spins+",
+    amount=1,
+    rarity="uncommon"
+)
+
+SymbolBlast = Charm(
+    "Symbol Blast",
+    "Increase a chosen symbol's xmult by +3",
+    kind="symbol_xmult",
+    amount=3,
+    rarity="uncommon"
+)
+
 # ============================================================
-# CHARM DEFINITIONS - RARE TIER (20% spawn rate base)
+# CHARM DEFINITIONS - RARE TIER (20% spawn rate base) (22% with upgrade)
 # ============================================================
 
 ImBadAtMath = Charm(
@@ -1240,39 +1610,39 @@ ImBadAtMath = Charm(
     rarity="rare"
 )
 
-Score5Patterns = Charm(
-    "Pattern Doubler",
-    "When you score 5 patterns, double all symbol values until end of round",
-    kind="conditional_mult",
+Ramen = Charm(
+    "Ramen",
+    "Whenever you score 5 patterns, double the value of all symbols until the end of the round",
+    kind="value_doubling",
     rarity="rare"
 )
 
-NoPatternBoost = Charm(
-    "Clutch Play",
-    "When you score no patterns, double symbol/pattern mults and 1.5x earnings",
-    kind="conditional_mult",
+BeefBrisket = Charm(
+    "Beef Brisket",
+    "Whenever you score no patterns in a round, double all symbol mults, pattern mults, and 1.5 * earnings mult",
+    kind="value_boost_on_drought",
     rarity="rare"
 )
 
-EarningsMultUp = Charm(
-    "Earnings Boost",
-    "Earnings mult +1 (doesn't take space)",
+FreeEarnings = Charm(
+    "Free Earnings",
+    "Earnings mult +1 permanently (doesn't take space)",
     kind="earnings_mult",
     rarity="rare"
 )
 
-SymbolsMultUp = Charm(
-    "Symbol Power",
+Bell = Charm(
+    "Bell",
     "Symbols mult +1 permanently (cooldown 2)",
     kind="symbols_mult",
     cooldown_rounds=2,
     rarity="rare"
 )
 
-PatternsMultScaling = Charm(
-    "Pattern Scaling",
-    "Patterns mult +1 for every 1.5x deadline earned",
-    kind="patterns_mult_scaling",
+EverythingInExcess = Charm(
+    "Everything in Excess",
+    "Patterns mult +1 permanently for every time you earn 1.5x the required deadline's amount",
+    kind="patterns_mult",
     rarity="rare"
 )
 
@@ -1292,14 +1662,386 @@ CoinExtraTrigger = Charm(
     rarity="rare"
 )
 
+PatternPulse = Charm(
+    "Pattern Pulse",
+    "70% chance to trigger patterns one more time for the rest of the spin when there are 10 pattern triggers in a spin",
+    kind="retrigger",
+    rarity="rare"
+)
+
+BigScore = Charm(
+    "Big Score",
+    "Whenever you score at least 8 patterns, triple all symbol values for the rest of the round",
+    kind="value_doubling",
+    rarity="rare"
+)
+
+DrySpellBoost = Charm(
+    "Dry Spell",
+    "Whenever you score no patterns in a round, increase all symbol and pattern values by 90% permanently",
+    kind="value_boost_on_drought",
+    rarity="rare"
+)
+
+PatternSurge = Charm(
+    "Pattern Surge",
+    "Patterns mult +2 permanently after scoring 10 patterns in a round",
+    kind="patterns_mult",
+    rarity="rare"
+)
+
+LuckyCoinMath = Charm(
+    "Lucky Coin Math",
+    "30% chance to trigger patterns one more time when a pattern contains a Coin",
+    kind="retrigger",
+    rarity="rare"
+)
+
+SymbolFrenzy = Charm(
+    "Symbol Frenzy",
+    "Symbols mult +2 permanently after scoring 5 jackpots in a round",
+    kind="symbols_mult",
+    rarity="rare"
+)
+
+PatternWave = Charm(
+    "Pattern Wave",
+    "Patterns mult +2 permanently after scoring 7 patterns in one spin",
+    kind="patterns_mult",
+    rarity="rare"
+)
+
+EarningsRush = Charm(
+    "Earnings Rush",
+    "Earnings mult +3 permanently (doesn't take space)",
+    kind="earnings_mult",
+    rarity="rare"
+)
+
+SymbolRitual = Charm(
+    "Symbol Ritual",
+    "Symbols mult +3 permanently after scoring 5+ different patterns in one spin",
+    kind="symbols_mult",
+    rarity="rare"
+)
+
+PatternChain = Charm(
+    "Pattern Chain",
+    "Patterns mult +1 permanently every time you score 5 patterns after a scoreless spin",
+    kind="patterns_mult",
+    rarity="rare"
+)
+
+DoubleCoinValues = Charm(
+    "Double Coin Values",
+    "Double all Coin values for the rest of the round after scoring 5 Coin patterns",
+    kind="value_doubling",
+    rarity="rare"
+)
+
+DoubleDiceValues = Charm(
+    "Double Dice Values",
+    "Double all Dice values for the rest of the round after scoring 5 Dice patterns",
+    kind="value_doubling",
+    rarity="rare"
+)
+
+DoubleSpinnerValues = Charm(
+    "Double Spinner Values",
+    "Double all Spinner values for the rest of the round after scoring 5 Spinner patterns",
+    kind="value_doubling",
+    rarity="rare"
+)
+
+DoubleCardValues = Charm(
+    "Double Card Values",
+    "Double all Card values for the rest of the round after scoring 5 Card patterns",
+    kind="value_doubling",
+    rarity="rare"
+)
+
+DoubleWheelValues = Charm(
+    "Double Wheel Values",
+    "Double all Wheel values for the rest of the round after scoring 5 Wheel patterns",
+    kind="value_doubling",
+    rarity="rare"
+)
+
+DoubleAllPatterns = Charm(
+    "Double All Patterns",
+    "Double all pattern values for the rest of the round after scoring 7+ patterns in one spin",
+    kind="value_doubling",
+    rarity="rare"
+)
+
+EarningsWave = Charm(
+    "Earnings Wave",
+    "Double earnings mult for the rest of the round after scoring 18+ patterns in one spin",
+    kind="earnings_mult",
+    rarity="rare"
+)
+
+SymbolEcho = Charm(
+    "Symbol Echo",
+    "Symbols mult +1 permanently after scoring 3 different symbol patterns in one spin",
+    kind="symbols_mult",
+    rarity="rare"
+)
+
+PatternEcho = Charm(
+    "Pattern Echo",
+    "Patterns mult +1 permanently after scoring 5 different patterns in one spin",
+    kind="patterns_mult",
+    rarity="rare"
+)
+
+EarningsEcho = Charm(
+    "Earnings Echo",
+    "Earnings mult +1 permanently after scoring 4 consecutive spins with no patterns",
+    kind="earnings_mult",
+    rarity="rare"
+)
+
+SymbolRally = Charm(
+    "Symbol Rally",
+    "Symbols mult +1 permanently after scoring 6+ same_symbol patterns in one deadline",
+    kind="symbols_mult",
+    rarity="rare"
+)
+
+PatternRally = Charm(
+    "Pattern Rally",
+    "Patterns mult +1 permanently after scoring 8+ patterns across two spins",
+    kind="patterns_mult",
+    rarity="rare"
+)
+
+EarningsRally = Charm(
+    "Earnings Rally",
+    "Earnings mult +2 permanently after scoring the same pattern 5 spins in a row",
+    kind="earnings_mult",
+    rarity="rare"
+)
+
+ValueSpill = Charm(
+    "Value Spill",
+    "Increase all symbol values by their current value after 10+ pattern triggers in one deadline",
+    kind="symbol_value",
+    rarity="rare"
+)
+
+PatternReverb = Charm(
+    "Pattern Reverb",
+    "Increase all pattern values by their current value, permanently after scoring 10 patterns in a spin without a Jackpot",
+    kind="pattern_value",
+    rarity="rare"
+)
+
+SymbolCascade = Charm(
+    "Symbol Cascade",
+    "Symbols mult +1 permanently after scoring a pattern with 4+ symbols",
+    kind="symbols_mult",
+    rarity="rare"
+)
+
+PatternCascade = Charm(
+    "Pattern Cascade",
+    "Patterns mult +1 permanently after scoring a pattern with 5+ symbols",
+    kind="patterns_mult",
+    rarity="rare"
+)
+
+#===========================================================
+# CHARM DEFINITIONS - EPIC TIER (5% spawn rate base) (10% with upgrade)
+#===========================================================
+
+Commit = Charm(
+    "Commit",
+    "Gain a new charm with rarity of last bought charm, destroy a random charm with rarity of last bought charm. Destroys after use",
+    kind="code_commit",
+    rarity="epic"
+)
+
+PatternAurora = Charm(
+    "Pattern Aurora",
+    "Double all pattern values for the rest of the deadline when you score 10+ patterns in a spin",
+    kind="value_doubling",
+    rarity="epic"
+)
+
+TripleAllSymbols = Charm(
+    "Triple All Symbols",
+    "Triple all symbol values for the rest of the deadline after scoring 18+ patterns in one spin",
+    kind="value_doubling",
+    rarity="epic"
+)
+
+TripleAllPatterns = Charm(
+    "Triple All Patterns",
+    "Triple all pattern values for the rest of the deadline after scoring 20+ patterns in one spin",
+    kind="value_doubling",
+    rarity="epic"
+)
+
+TripleEarningsMult = Charm(
+    "Triple Earnings Mult",
+    "Triple earnings mult permanently after ending a deadline at 500% of requirement",
+    kind="earnings_mult",
+    rarity="epic"
+)
+
+QuadAllSymbols = Charm(
+    "Quad All Symbols",
+    "Quadruple all symbol values for the rest of the round after scoring 30+ patterns in one spin",
+    kind="value_doubling",
+    rarity="epic"
+)
+
+QuadAllPatterns = Charm(
+    "Quad All Patterns",
+    "Quadruple all pattern values for the rest of the round after scoring 25 same_symbol patterns in one spin",
+    kind="value_doubling",
+    rarity="epic"
+)
+
+QuadEarningsMult = Charm(
+    "Quad Earnings Mult",
+    "Quadruple earnings mult permanently after scoring 100+ patterns in a deadline",
+    kind="earnings_mult",
+    rarity="epic"
+)
+
+SymbolTriumph = Charm(
+    "Symbol Triumph",
+    "Symbols mult +3 permanently after scoring 30+ jackpots in a single round",
+    kind="symbols_mult",
+    rarity="epic"
+)
+
+PatternTriumph = Charm(
+    "Pattern Triumph",
+    "Patterns mult +3 permanently after scoring 12+ jackpots in one spin",
+    kind="patterns_mult",
+    rarity="epic"
+)
+
+EarningsTriumph = Charm(
+    "Earnings Triumph",
+    "Earnings mult +4 permanently after scoring 20+ patterns in one spin",
+    kind="earnings_mult",
+    rarity="epic"
+)
+
+SymbolOverdrive = Charm(
+    "Symbol Overdrive",
+    "Symbols mult +5 permanently after scoring 7 different patterns in one spin",
+    kind="symbols_mult",
+    rarity="epic"
+)
+
+PatternOverdrive = Charm(
+    "Pattern Overdrive",
+    "Patterns mult +5 permanently after scoring 10 of the same pattern type in a row",
+    kind="patterns_mult",
+    rarity="epic"
+)
+
+EarningsOverdrive = Charm(
+    "Earnings Overdrive",
+    "Earnings mult +5 permanently (cooldown 7)",
+    kind="earnings_mult",
+    rarity="epic"
+)
+
+QuadThunder = Charm(
+    "Quad Thunder",
+    "Quadruple all symbols and pattern values when you score only one pattern in a spin and it has exactly 9 symbols",
+    kind="value_doubling",
+    rarity="epic",
+)
+
+Stage = Charm(
+    "Stage",
+    "All changes to a charm will be permanent. Destroys after use",
+    kind="code_stage",
+    rarity="epic"
+)
+
+Sync = Charm(
+    "Sync",
+    "All changes to game values will be permanent. Usable between spins. Destroys after use",
+    kind="code_sync",
+    rarity="epic"
+)
+
+New_Variable = Charm(
+    "New Variable",
+    "Add a new xmult option to a symbol of maximum of 25. Destroys after use",
+    kind="code_new_variable",
+    rarity="epic"
+)
+
+Make_True = Charm(
+    "Make True",
+    "A phone call will now have your ability of choice WITHIN UPGRADE LIMITS. Destroys after use",
+    kind="code_make_true",
+    rarity="epic"
+)
+
+More_Coding = Charm(
+    "More Coding",
+    "Gives a charm with '//' in its name every deadline if player has enough space",
+    kind="code_more_coding",
+    rarity="epic"
+)
+
+Python = Charm(
+    "Python",
+    "Gives symbols +base value every time an epic or legendary charm is used",
+    kind="code_python",
+    rarity="epic"
+)
+
+HTML = Charm(
+    "HTML",
+    "Gives patterns +base value every time an epic or legendary charm is used",
+    kind="code_html",
+    rarity="epic"
+)
+
+I_WANT_IT_NOW = Charm(
+    "I WANT IT NOW",
+    "Choose a charm to get (non exotic +). Destroys after use",
+    kind="code_want_it_now",
+    rarity="epic"
+)
+
+FusionReactor = Charm(
+    "Fusion Reactor",
+    """Boost all fusion modifier chances by 10%
+    Mimics now go after the rarest modifier to copy following same logic.
+    Symbol modifier now gives +2 for trigger, pattern mult modifier now requires only one pattern to do its effect.
+    Creates a new modifier called earnings; scoring 3 patterns with it increases your earnings bonus by 2 for the rest of the round.""",
+    kind="fusion_amplifier",
+    amount=8,
+    rarity="epic"
+)
+
+Resurrection = Charm(
+    "Resurrection",
+    "When you are about to die you gain two extra rounds. Then destroys itself",
+    kind="revive",
+    rarity="epic"
+)
+
 # ============================================================
-# CHARM DEFINITIONS - LEGENDARY TIER (5% spawn rate base)
+# CHARM DEFINITIONS - LEGENDARY TIER (5% spawn rate with upgrade)
 # ============================================================
 
 CCHARM = Charm(
     "CCHARM",
     "All cooldown charms trigger one more time",
-    kind="cooldown_retrigger",
+    kind="cooldown_charm_retrigger",
     rarity="legendary"
 )
 
@@ -1313,34 +2055,34 @@ ProtestingCall = Charm(
 WorldRecordPepper = Charm(
     "World Record Pepper",
     "Score 15+ patterns in a spin = double all symbol values (resets end of deadline)",
-    kind="conditional_mult_15",
+    kind="value_doubling",
     rarity="legendary"
 )
 
 GiantPeach = Charm(
     "Giant Peach",
     "Score 30+ patterns in a spin = double patterns and symbols (resets end of deadline)",
-    kind="conditional_mult_30",
+    kind="value_doubling",
     rarity="legendary"
 )
 
 LargestTomato = Charm(
     "The Largest Tomato Ever",
     "Score 50+ patterns = double value, then triple, then quad, etc. (resets end of deadline)",
-    kind="conditional_mult_exponential",
+    kind="value_exponential",
     rarity="legendary"
 )
 
-PSA15 = Charm(
-    "PSA 15",
-    "Charms giving +1 to mult now give +10 to patterns, x1.5 to symbols",
-    kind="mult_boost",
+MoneyMakingMachine = Charm(
+    "Money Making Machine",
+    "Charms giving patterns multiplier + 1 and symbols multiplier + 1 now give patterns multiplier +10 and symbols multiplier x1.5",
+    kind="mult_converter",
     rarity="legendary"
 )
 
 Flowers = Charm(
     "Flowers",
-    "Increase value of all symbols every other pattern (resets end of deadline)",
+    "Increase value of all symbols by their base value every other pattern (resets end of deadline)",
     kind="alternating_boost",
     rarity="legendary"
 )
@@ -1356,13 +2098,70 @@ INeedToStopWinning = Charm(
 GoldRush = Charm(
     "Gold Rush",
     """Gold Rush: If a spin contains >=10 scored patterns, the aggregated GOLD modifiers
-from the previous ten patterns are immediately added permanently to their symbol types.
-Additionally, GOLD modifiers still queue their normal delayed bonuses (+base_value per
-GOLD symbol, multiplied by retriggers) for the next spin. This makes GOLD modifiers
-far more powerful when many patterns are scored in a single spin.""",
+from the previous ten patterns are immediately added to their symbol types for every pattern
+after 10. Additionally, GOLD modifiers still queue their normal delayed bonuses for the next spin. 
+This makes GOLD modifiers far more powerful when many patterns are scored in a single spin.""",
     kind="gold_amplifier",
     rarity="legendary"
 )
+
+CooldownChoir = Charm(
+    "Cooldown Choir",
+    "All cooldown charms trigger one more time",
+    kind="cooldown_charm_retrigger",
+    rarity="legendary"
+)
+
+PhoneEncore = Charm(
+    "Phone Encore",
+    "All phone abilities trigger one more time",
+    kind="phone_retrigger",
+    rarity="legendary"
+)
+
+Blossom = Charm(
+    "Blossom",
+    "Increase value of all symbols and patterns by their base value every fourth pattern (resets end of deadline)",
+    kind="alternating_boost",
+    rarity="legendary"
+)
+
+JackpotShield = Charm(
+    "Jackpot Shield",
+    "Jackpots don't occur - one random cell changes symbol instead (requires 6 charges)",
+    kind="jackpot_prevention",
+    cooldown_rounds=6,
+    rarity="legendary"
+)
+
+GoldStandard = Charm(
+    "Gold Standard",
+    "If a spin contains >=8 scored patterns, all GOLD modifiers double their effect for the round",
+    kind="gold_amplifier",
+    rarity="legendary"
+)
+
+SymbolFusion = Charm(
+    "Symbol Fusion",
+    "+20% chance for your most valuable symbol to have the symbol modifier. Scoring a pattern with this modifier increases your symbol multiplier by one until the end of the round",
+    kind="symbol_modifier",
+    rarity="legendary_craftable",
+)
+
+PatternFusion = Charm(
+    "Pattern Fusion",
+    "+15% chance for your most valuable symbol to have the pattern mult modifier. Scoring two patterns with this modifier increases your patterns multiplier by one until the end of the round",
+    kind="pattern_mult_modifier",
+    rarity="legendary_craftable",
+)
+
+Mimic = Charm(
+    "Mimic",
+    "+25% chance for all symbols to have the mimic modifier. Mimic becomes the modifier of the closest symbol with a modifier's modifier",
+    kind="mimic_modifier",
+    rarity="legendary_craftable",
+)
+
 
 # ============================================================
 # CHARM DEFINITIONS - EXOTIC TIER (SPAWNED FROM PHONE ABILITIES ONLY)
@@ -1420,7 +2219,7 @@ AlwaysOn = Charm(
 TheSeraphim = Charm(
     "The Seraphim",
     "When you score all patterns except Jackpot, ^3 to symbols and patterns (resets end of round)",
-    kind="exotic_seraphim",
+    kind="conditional_nonJackpot",
     rarity="exotic"
 )
 
@@ -1451,14 +2250,14 @@ Body = Charm(
 SevenDeadlySins = Charm(
     "7 Deadly Sins",
     "5% chance to get three 7s on board (1,1)(1,2)(1,3). Reward ^^2 coins earned this round",
-    kind="seven_multiplier",
+    kind="three7s",
     rarity="exotic"
 )
 
 InfiniteStorage = Charm(
     "Infinite Storage",
     "+1 charm space for every 5+ jackpots in spin, +1 for each jackpot after 10th",
-    kind="space_scaling",
+    kind="charm_space_scaling",
     rarity="exotic"
 )
 
@@ -1467,6 +2266,22 @@ RELOADING = Charm(
     "All symbols gain 1/9 of current value every shop restock. Restock costs /2",
     kind="shop_scaling",
     rarity="exotic"
+)
+
+Polynomial = Charm(
+    "Polynomial",
+    "All charms that scale now scale by a degree 2 polynomial.",
+    kind="scale_scaling",
+    rarity="exotic"
+)
+
+Fusion_Reactor = Charm(
+    "Fusion Reactor",
+    """Increases chances of all symbols to have mimic, symbol, or pattern_mult modifiers by 20%
+    Symbol now gives +2 symbol mult, Pattern now only requires one pattern, Mimic copies rarest modifier instead of most common one
+    Creates a new modifier called earnings that increases your earnings mult by 2 for every 3 patterns scored with the modifier""",
+    kind="new_modifiers",
+    rarity="exotic_craftable",
 )
 
 # ============================================================
@@ -1517,8 +2332,8 @@ CRAFTABLE_CHARMS = {
         "requires": ["I'm Bad At Math", "CCHARM"],  # Two retrigger charms
         "rarity": "craftable"
     },
-    "//Symbol": {
-        "name": "Symbol Upgrade",
+    "HelloSymbol": {
+        "name": "HelloSymbol",
         "description": "15% chance for any symbol to have any symbol modifier",
         "requires": ["I can't stop winning", "Re-Retrigger", "AGAINAGAINAGAIN"],
         "rarity": "craftable"
@@ -1541,6 +2356,30 @@ CRAFTABLE_CHARMS = {
         "requires": ["All Exotic Charms"],  # Requires all exotic charms
         "rarity": "craftable_exotic"
     },
+    "Symbol Fusion": {
+        "name": "Symbol Fusion",
+        "description": "Craft the Symbol Fusion charm, which grants symbol modifier spawning with end-of-round symbol bonus effects.",
+        "requires": ["Golden Coins", "Golden Dice", "Golden Wheels"],
+        "rarity": "craftable_rare"
+    },
+    "Pattern Fusion": {
+        "name": "Pattern Fusion",
+        "description": "Craft the Pattern Fusion charm, which grants pattern modifier spawning with end-of-round pattern bonus effects.",
+        "requires": ["Golden Spinners", "Golden Cards", "Golden Dice"],
+        "rarity": "craftable_rare"
+    },
+    "Mimic": {
+        "name": "Mimic",
+        "description": "Craft the Mimic Fusion charm, which grants mimic modifier spawning to copy nearby modifiers.",
+        "requires": ["Golden Wheels", "Golden Cards", "Golden Coins"],
+        "rarity": "craftable_rare"
+    },
+    "Fusion Reactor": {
+        "name": "Fusion Reactor",
+        "description": "Craft the Fusion Reactor charm, increasing fusion modifier chances and mimic power.",
+        "requires": ["NOCHANGE", "CCHARM", "NotGreedy"],
+        "rarity": "craftable_epic"
+    },
     "THE WORLD ENDER": {
         "name": "THE WORLD ENDER",
         "description": "20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x, 777 gain [x^2]x. X increases by 1 per 5 jackpots. Spawn 777 next spin. +1 charm space permanently",
@@ -1557,32 +2396,57 @@ ALL_CHARMS = [
     # Common
     Tomato, Peach,
     GoldenWheels, GoldenDice, GoldenCoins, GoldenSpinners, GoldenCards,
+    Altered_Coin, Spoons, X, N,
+    LuckyPenny, FortuneCookie, JadeRabbit, Cornerstone, LuckyStar, Wishbone,
+    Sunflower, CatWink, Smile, FourLeaf,
+    OneMoreSpin, PocketRabbit, BrokenMirror,
     
     # Uncommon
     Spare_Change,
     Struck_Gold, Trick_Deck, ILoveTops, Dice_Hard, WheelOfFortune,
     SymbolBoost, SymbolSurge,
-    CharmPocket, CharmSatchel, Blueprint, CharmLocker, LeftWing,
+    CharmPocket, CharmHouse, Blueprint, LeftWing,
+    PhoneReuse, CharmReappear, TakeSpace,
     I_cant_stop_winning, ReRetrigger, AGAINAGAINAGAIN,
+    LuckyReroll,
     
     # Rare
     ImBadAtMath,
-    Score5Patterns, NoPatternBoost,
-    EarningsMultUp, SymbolsMultUp, PatternsMultScaling,
-    NO_CHANGE, CoinExtraTrigger,
-    
+    Ramen, BeefBrisket,
+    FreeEarnings, Bell, EverythingInExcess,
+    NO_CHANGE, CoinExtraTrigger, PatternPulse, BigScore,
+    DrySpellBoost, PatternSurge,
+    PatternAurora, SymbolFrenzy, PatternWave, EarningsRush,
+    SymbolRitual, PatternCascade, SymbolCascade,
+    DoubleCoinValues, DoubleDiceValues, DoubleSpinnerValues,
+    DoubleCardValues, DoubleWheelValues,
+    DoubleAllPatterns, EarningsWave,
+    SymbolEcho, PatternEcho, EarningsEcho,
+    SymbolRally, PatternRally, EarningsRally,
+    ValueSpill, PatternReverb,
+
+    # Epic
+    Commit, Stage, Sync, New_Variable, Make_True, More_Coding, Python, HTML, I_WANT_IT_NOW, FusionReactor, Resurrection,
+    TripleAllSymbols, TripleAllPatterns, TripleEarningsMult,
+    QuadAllSymbols, QuadAllPatterns, QuadEarningsMult,
+    SymbolTriumph, PatternTriumph, EarningsTriumph,
+    SymbolOverdrive, PatternOverdrive, EarningsOverdrive,
+    QuadThunder,
+
     # Legendary
     CCHARM, ProtestingCall,
     WorldRecordPepper, GiantPeach, LargestTomato,
-    PSA15, Flowers,
+    MoneyMakingMachine, Flowers,
     INeedToStopWinning, GoldRush,
+    CooldownChoir, PhoneEncore, 
+    JackpotShield, GoldStandard,
+    SymbolFusion, PatternFusion, Mimic,
     
     # Exotic
     QuantProfessor, IsThisBroken, TenXMult,
     CoinTailsBoost, ExponentialMult, ExponentialGrowth,
     AlwaysOn, TheSeraphim, Blood, Soul, Body,
-    SevenDeadlySins, InfiniteStorage, RELOADING,
-    
+    SevenDeadlySins, InfiniteStorage, RELOADING, Polynomial,
     
     # Transcendency
     THEWORLDENDER, EssenceOfGods,
@@ -1592,26 +2456,46 @@ ALL_OBTAINABLE_CHARMS_LIST = [
     # Common
     Tomato, Peach,
     GoldenWheels, GoldenDice, GoldenCoins, GoldenSpinners, GoldenCards,
+    Altered_Coin, Spoons, X, N,
+    LuckyPenny, FortuneCookie, JadeRabbit, Cornerstone, LuckyStar, Wishbone,
+    Sunflower, CatWink, Smile, FourLeaf,
+    OneMoreSpin, PocketRabbit, BrokenMirror,
     
     # Uncommon
     Spare_Change,
     Struck_Gold, Trick_Deck, ILoveTops, Dice_Hard, WheelOfFortune,
     SymbolBoost, SymbolSurge,
-    CharmPocket, CharmSatchel, Blueprint, CharmLocker, LeftWing,
+    CharmPocket, CharmHouse, Blueprint, LeftWing,
+    PhoneReuse, CharmReappear, TakeSpace,
     I_cant_stop_winning, ReRetrigger, AGAINAGAINAGAIN,
+    LuckyReroll,
     
     # Rare
     ImBadAtMath,
-    Score5Patterns, NoPatternBoost,
-    EarningsMultUp, SymbolsMultUp, PatternsMultScaling,
-    NO_CHANGE, CoinExtraTrigger,
+    Ramen, BeefBrisket,
+    FreeEarnings, Bell, EverythingInExcess,
+    NO_CHANGE, CoinExtraTrigger, PatternPulse, BigScore,
+    DrySpellBoost, PatternSurge,
+    PatternAurora, SymbolFrenzy, PatternWave, EarningsRush,
+    SymbolRitual, PatternCascade, SymbolCascade,
+    DoubleCoinValues, DoubleDiceValues, DoubleSpinnerValues,
+    DoubleCardValues, DoubleWheelValues,
+    DoubleAllPatterns, EarningsWave,
+    SymbolEcho, PatternEcho, EarningsEcho,
+    SymbolRally, PatternRally, EarningsRally,
+    ValueSpill, PatternReverb,
+    
+    # Epic
+    Commit, Stage, Sync, New_Variable, Make_True, More_Coding, Python, HTML, I_WANT_IT_NOW,
+    Resurrection,
 ]
 
 ALL_OBTAINABLE_LOCKED = [
     CCHARM, ProtestingCall,
     WorldRecordPepper, GiantPeach, LargestTomato,
-    PSA15, Flowers,
+    MoneyMakingMachine, Flowers,
     INeedToStopWinning, GoldRush,
+    CooldownChoir, PhoneEncore, JackpotShield, GoldStandard,
 ]
 
 
@@ -1634,7 +2518,8 @@ def compute_effective_max_spins(base_max_spins, owned_charms):
     """
     Extra spin charms increase max spins per round.
     """
-    extra = sum(1 for d in owned_charms if d['charm'].kind == "extra_spin")
+    # support charms that list multiple kinds in a comma-separated string
+    extra = sum(1 for d in owned_charms if "extra_spin" in str(d['charm'].kind))
     return base_max_spins + extra
 
 
@@ -1681,8 +2566,24 @@ def compute_spin_luck(owned_charms, board):
 
     for d in owned_charms:
         charm = d['charm']
-        if charm.kind == 'luck':
+
+        # handle persistent multi-spin luck from previous triggers
+        if d.get('temp_luck_spins', 0) > 0 and "luck" in str(charm.kind):
             bonus_luck += charm.amount
+            d['temp_luck_spins'] -= 1
+            continue
+
+        # charms can declare multiple kinds separated by commas
+        if "luck" in str(charm.kind):
+            # if charm has a chance, roll to see if it activates
+            if getattr(charm, 'chance', None) is not None:
+                if random.random() * 100 <= charm.chance:
+                    bonus_luck += charm.amount
+                    # if the charm lasts multiple spins, mark temp counter
+                    if getattr(charm, 'spins', 1) > 1:
+                        d['temp_luck_spins'] = charm.spins - 1
+            else:
+                bonus_luck += charm.amount
 
     total_luck = max(1, initial_luck + bonus_luck)
     return total_luck
@@ -1896,19 +2797,54 @@ def get_spin_amount(money, max_spins, owned_charms):
 
 
 # ============================================================
+# WEIGHT CHARM HELPERS
+# ============================================================
+
+def calculate_weight_increase(target_symbol_class):
+    """
+    Calculate the weight increase needed to add approximately +2 average symbols per spin.
+    
+    On a 3x5 (15-cell) board, we solve for X where:
+    (base_weight + X) / (base_total_weight + X) * 15 = (base_weight / base_total_weight * 15) + 2
+    
+    This ensures that the target symbol type appears 2 more times per spin on average.
+    """
+    base_weight = getattr(target_symbol_class, "weight", 1)
+    # With default symbols: Coin=30, Spinner=25, Dice=20, Card=15, Wheel=10, Seven=0 (total=100)
+    base_total_weight = 100
+    
+    # Current average count of this symbol on a 15-cell board
+    current_avg = (base_weight / base_total_weight) * 15
+    target_avg = current_avg + 2
+    
+    # Solve: (base_weight + X) / (base_total_weight + X) * 15 = target_avg
+    # base_weight * 15 + X * 15 = target_avg * (base_total_weight + X)
+    # X * (15 - target_avg) = target_avg * base_total_weight - base_weight * 15
+    
+    numerator = target_avg * base_total_weight - base_weight * 15
+    denominator = 15 - target_avg
+    
+    if denominator > 0:
+        increase = numerator / denominator
+        return max(1, int(round(increase)))
+    return 2  # fallback
+
+
+# ============================================================
 # AUTO‑ACTIVATE‑ALL CHARM PHASE (UPDATED)
 # ============================================================
 
-def charm_phase(owned_charms, active_bonuses, symbol_classes=None):
+def charm_phase(owned_charms, active_bonuses, symbol_classes=None, deadlines=None):
     """
     UPDATED BEHAVIOR:
     When the player types 'charm', ALL cooldown-based charms that are off cooldown
     automatically activate, in order, with no menu.
     
     This includes:
-      - weight_active charms (Struck Gold, Trick Deck, etc.)
+      - weight_active charms (Struck Gold, Trick Deck, etc.) - applies weight increase for +2 avg symbols
       - Any other charm with cooldown_rounds > 0 and currently available
     
+    Weight increases PERSIST across spins within a deadline and accumulate with each trigger.
     Each charm keeps its own diminishing-return chain.
     """
 
@@ -1932,12 +2868,15 @@ def charm_phase(owned_charms, active_bonuses, symbol_classes=None):
             target_cls = charm.target
             target_name = target_cls.__name__
 
+            # Calculate increase based on target symbol's base weight
+            increase = calculate_weight_increase(target_cls)
+
             # First activation this round
             if d['activations_this_round'] == 0:
-                increase = 20
                 active_bonuses[target_cls] = active_bonuses.get(target_cls, getattr(target_cls, "weight", 1)) + increase
                 d['last_increase'] = increase
-                print(f"  ✓ {charm.name}: {target_name} weight +{increase}")
+                current_avg = (active_bonuses[target_cls] / (100 + increase)) * 15
+                print(f"  ✓ {charm.name}: {target_name} weight +{increase} (~+2 avg symbols)")
 
             else:
                 # Subsequent activations: 90% of last increase (diminishing returns)
@@ -2129,6 +3068,7 @@ def main():
             continue
 
         spins = choice
+        board.start_round()
         money -= spins
 
         # Update cooldowns and reset round activation counters
@@ -2139,6 +3079,7 @@ def main():
 
         # Compute spin luck and use it during board creation
         spin_luck = compute_spin_luck(owned_charms, board)
+        # NOTE: DO NOT reset active_bonuses here - weight increases persist across spins within a deadline
         weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses, owned_charms)
         board.grand_total = 0
         patterns_scored_this_round = 0  # Track total patterns for conditional charms
@@ -2154,6 +3095,8 @@ def main():
                 charm_input = input("> ").strip().lower()
                 if charm_input == "charm":
                     charm_phase(owned_charms, active_bonuses, BASE_SYMBOL_CLASSES)
+                    # Recalculate weights after charm activation so changes take effect on next spin
+                    weight_overrides = compute_weight_overrides(BASE_SYMBOL_CLASSES, active_bonuses, owned_charms)
             
             # Check and trigger conditional charms based on patterns this spin
             patterns_this_spin = board.patterns_scored_this_spin
