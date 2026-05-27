@@ -1,3 +1,4 @@
+from ast import pattern
 import random
 from time import sleep
 
@@ -755,122 +756,24 @@ class Board:
     # --------------------------------------------------------
 
     def fill_cells(self, symbol_classes, weights, owned_charms, active_bonuses):
-        """
-        Fill empty cells with symbols, applying:
-          - Weight overrides
-          - Global bonuses
-          - Recharge/repeat modifier effects
-          - Golden modifier chance
-          - Activation (roll/spin/draw)
-        """
 
-        # Build weights list in order
         weights_list = [weights[cls] for cls in symbol_classes]
-
-        # Check charms: detect any charm whose kind mentions 'gold' for GOLD modifiers
-        has_golden_coins = any('gold' in str(d['charm'].kind) and d['charm'].target is Coin for d in owned_charms)
-        has_golden_dice = any('gold' in str(d['charm'].kind) and d['charm'].target is Dice for d in owned_charms)
-        has_golden_spinners = any('gold' in str(d['charm'].kind) and d['charm'].target is Spinner for d in owned_charms)
-        has_golden_cards = any('gold' in str(d['charm'].kind) and d['charm'].target is Card for d in owned_charms)
-        has_golden_wheels = any('gold' in str(d['charm'].kind) and d['charm'].target is Wheel for d in owned_charms)
-        has_AGAINAGAINAGAIN = any('repetition' in str (d['charm'].kind) and d['charm'].target is Coin or Spinner for d in owned_charms)
-        battery_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "battery_modifier")
-        repetition_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "repetition_modifier")
-        symbol_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "symbol_modifier_chance")
-        chain_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "chain_modifier_chance")
-        pattern_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "pattern_modifier_chance")
-        mimic_modifier_chance = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "mimic_modifier_chance")
-        fusion_amplifier_bonus = sum(d['charm'].amount for d in owned_charms if d['charm'].kind == "fusion_amplifier")
-        modifier_chance_bonus = get_modifier_chance_bonus(owned_charms)
-
-        symbol_modifier_chance += modifier_chance_bonus + fusion_amplifier_bonus
-        pattern_modifier_chance += modifier_chance_bonus + fusion_amplifier_bonus
-        mimic_modifier_chance += max(0, modifier_chance_bonus // 2) + fusion_amplifier_bonus // 2
 
         for x in range(self.rows):
             for y in range(self.cols):
-                if self.grid[x][y] is None:
 
-                    # Choose symbol class
-                    symbol_class = random.choices(symbol_classes, weights=weights_list, k=1)[0]
-                    symbol = symbol_class()
+                if self.grid[x][y] is not None:
+                    continue
 
-                    # Apply permanent and round-scoped global bonuses
-                    bonus = self.global_symbol_bonuses.get(symbol_class, 0) + self.round_symbol_bonuses.get(symbol_class, 0)
-                    if bonus:
-                        symbol.current_value += bonus
+                symbol_class = random.choices(
+                    symbol_classes,
+                    weights=weights_list,
+                    k=1
+                )[0]
 
-                    # Activate (roll/spin/draw)
-                    symbol.activate()
+                symbol = self.build_symbol(symbol_class, x, y, owned_charms)
 
-                    # Fusion modifiers can attach to symbols
-                    if symbol_modifier_chance and random.randint(1, 100) <= symbol_modifier_chance:
-                        symbol.modifiers.append("symbol_mult")
-                        symbol.current_value += symbol.base_value
-                        symbol.display_name += " [SYMBOL]"
-
-                    if pattern_modifier_chance and random.randint(1, 100) <= pattern_modifier_chance:
-                        symbol.modifiers.append("pattern_mult")
-                        # Pattern multiplier modifiers will be applied during pattern scoring
-                        symbol.display_name += " [PATTERN]"   
-
-                    if mimic_modifier_chance and random.randint(1, 100) <= mimic_modifier_chance:
-                        symbol.modifiers.append("mimic")
-                        self.apply_mimic_modifier(symbol, x, y)
-
-                    # Random battery/repeat modifiers from owned charms
-                    if battery_chance and random.randint(1, 100) <= battery_chance:
-                        if any(d['charm'].amount for d in owned_charms if d['charm'].kind == "battery_modifier"):
-                            symbol.modifiers.append("recharge")
-                        symbol.display_name += " [RECHARGE]"
-                    
-                    
-                    if chain_modifier_chance and random.randint(1, 100) <= chain_modifier_chance:
-                        symbol.modifiers.append("chain")
-                        symbol.display_name += " [CHAIN]"
-
-                    if repetition_chance and random.randint(1, 100) <= repetition_chance:
-                        if any(d['charm'].amount for d in owned_charms if d['charm'].kind == "repetition_modifier"):
-                            pattern_is_repeated == True
-                            symbol.display_name += " [REPEAT]"
-                    else:
-                        pattern_is_repeated == False
-                    
-                    if isinstance(symbol, Coin) and has_AGAINGAGAINAGAIN:
-                        if repetition_chance and random.randint(1, 100) <= repetition_chance:
-                            pattern_is_repeated = True
-                            symbol.display_name += " [REPEAT]"
-                    elif isinstance(symbol, Spinner) and has_AGAINGAGAINAGAIN:
-                        pattern_is_repeated = True
-                        symbol.display_name += " [REPEAT]"
-
-                    # Golden modifier chance
-                    if isinstance(symbol, Coin) and has_golden_coins:
-                        if random.randint(1, 100) <= 25:
-                            symbol.is_golden = True
-                            symbol.display_name += " [GOLD]"
-
-                    if isinstance(symbol, Dice) and has_golden_dice:
-                        if random.randint(1, 100) <= 20:
-                            symbol.is_golden = True
-                            symbol.display_name += " [GOLD]"
-
-                    if isinstance(symbol, Spinner) and has_golden_spinners:
-                        if random.randint(1, 100) <= 30:
-                            symbol.is_golden = True
-                            symbol.display_name += " [GOLD]"
-
-                    if isinstance(symbol, Card) and has_golden_cards:
-                        if random.randint(1, 100) <= 25:
-                            symbol.is_golden = True
-                            symbol.display_name += " [GOLD]"
-
-                    if isinstance(symbol, Wheel) and has_golden_wheels:
-                        if random.randint(1, 100) <= 25:
-                            symbol.is_golden = True
-                            symbol.display_name += " [GOLD]"
-
-                    self.grid[x][y] = symbol
+                self.grid[x][y] = symbol
 
     # --------------------------------------------------------
     # SPIN
@@ -879,9 +782,9 @@ class Board:
     def current_spin(self, symbol_classes, weights, owned_charms, active_bonuses, spin_luck, spin_number=None):
         """
         Perform a new spin:
-          - Apply pending bonuses
-          - Reset grid
-          - Fill grid
+            - Apply pending bonuses
+            - Reset grid
+            - Fill grid
         """
         self.apply_pending_bonuses()
 
@@ -891,44 +794,102 @@ class Board:
         self.print_board(spin_number=spin_number)
         sleep(0.1)
 
-    def apply_luck_manifestation(self, luck_amount):
-        """Ensure the board contains at least luck_amount of one symbol type."""
-        if luck_amount <= 1:
-            return
+        def apply_luck_manifestation(self, luck_amount):
 
-        desired = min(luck_amount, self.rows * self.cols)
-        counts = {}
-        for x in range(self.rows):
-            for y in range(self.cols):
-                symbol = self.grid[x][y]
-                symbol_type = type(symbol)
-                counts[symbol_type] = counts.get(symbol_type, 0) + 1
+    if luck_amount <= 1:
+        return
 
-        if not counts:
-            return
+    desired = min(luck_amount, self.rows * self.cols)
 
-        target_type = max(counts.keys(), key=lambda t: (counts[t], t().base_value))
-        current_count = counts[target_type]
+    counts = {}
+    for x in range(self.rows):
+        for y in range(self.cols):
+            symbol = self.grid[x][y]
+            t = type(symbol)
+            counts[t] = counts.get(t, 0) + 1
 
-        if current_count >= desired:
-            return
+    if not counts:
+        return
 
-        needed = desired - current_count
-        candidates = [
-            (x, y) for x in range(self.rows) for y in range(self.cols)
-            if type(self.grid[x][y]) != target_type
-        ]
-        random.shuffle(candidates)
+    target_type = max(counts, key=lambda t: (counts[t], t().base_value))
+    current_count = counts[target_type]
 
-        for x, y in candidates[:needed]:
-            symbol = target_type()
-            bonus = self.global_symbol_bonuses.get(target_type, 0) + self.round_symbol_bonuses.get(target_type, 0)
-            if bonus:
-                symbol.current_value += bonus
-            symbol.activate()
-            self.grid[x][y] = symbol
+    if current_count >= desired:
+        return
 
-        print(f"Luck forced {desired}x {target_type.__name__} on board (luck={luck_amount}).")
+    needed = desired - current_count
+
+    candidates = [
+        (x, y)
+        for x in range(self.rows)
+        for y in range(self.cols)
+        if type(self.grid[x][y]) != target_type
+    ]
+
+    random.shuffle(candidates)
+
+    for x, y in candidates[:needed]:
+        symbol = self.build_symbol(target_type, x, y, owned_charms)
+        self.grid[x][y] = symbol
+
+    print(f"Luck forced {desired}x {target_type.__name__} on board (luck={luck_amount}).")
+
+            # =================================================
+            # MODIFIERS (REFACTORED SYSTEM)
+            # =================================================
+
+            def roll(chance):
+                return chance and random.randint(1, 100) <= chance
+
+            # SYMBOL
+            if roll(symbol_modifier_chance):
+                symbol.modifiers.append("symbol_mult")
+                symbol.current_value += symbol.base_value
+                symbol.display_name += " [SYMBOL]"
+
+            # PATTERN
+            if roll(pattern_modifier_chance):
+                symbol.modifiers.append("pattern_mult")
+                symbol.display_name += " [PATTERN]"
+
+            # MIMIC
+            if roll(mimic_modifier_chance):
+                symbol.modifiers.append("mimic")
+                self.apply_mimic_modifier(symbol, x, y)
+
+            # BATTERY
+            can_receive_battery = battery_all_symbols or isinstance(symbol, Dice)
+
+            if (
+                battery_enabled
+                and can_receive_battery
+                and roll(battery_chance)
+            ):
+                symbol.modifiers.append("recharge")
+                symbol.display_name += " [RECHARGE]"
+
+            # REPETITION
+            if repetition_enabled and roll(repetition_chance):
+                symbol.modifiers.append("repetition")
+                symbol.display_name += " [REPEAT]"
+
+            # AGAINAGAINAGAIN
+            if has_AGAINAGAINAGAIN and isinstance(symbol, tuple(REPETITION_TARGETS)):
+                if "repetition" not in symbol.modifiers:
+                    symbol.modifiers.append("repetition")
+                if "[REPEAT]" not in symbol.display_name:
+                    symbol.display_name += " [REPEAT]"
+
+            # GOLDEN
+            cfg = GOLDEN_CONFIG.get(type(symbol))
+            if cfg:
+                enabled, chance = cfg
+                if enabled and roll(chance):
+                    symbol.is_golden = True
+                    symbol.display_name += " [GOLD]"
+                        self.grid[x][y] = symbol
+
+                    print(f"Luck forced {desired}x {target_type.__name__} on board (luck={luck_amount}).")
 
     # --------------------------------------------------------
     # PRINT BOARD
@@ -983,10 +944,10 @@ class Board:
     def display_total(self, owned_charms, spin_number=None):
         """
         Score all patterns:
-          - Detect matches
-          - Apply golden modifier
-          - Apply retrigger logic
-          - Add delayed bonuses
+            - Detect matches
+            - Apply golden modifier
+            - Apply retrigger logic
+            - Add delayed bonuses
         Returns the number of patterns scored this spin (stored as instance variable).
         """
         self.patterns_scored_this_spin = 0  # Initialize counter
@@ -1085,15 +1046,14 @@ class Board:
                         retrigger_sources.append("Lucky Coin Math")
                         break
         
-        if pattern_is_repeated == True:
-            retrigger_count += 1
-            retrigger_sources.append("Repetition Modifier")
-        triggers = 1 + retrigger_count
+        
 
         if retrigger_count > 0:
             sources_str = ", ".join(dict.fromkeys(retrigger_sources))  # Remove duplicates while preserving order
             print(f"✨ {sources_str} activated! Retriggering patterns {retrigger_count} more time(s)...")
             sleep(0.75)
+        
+        triggers = 1 + retrigger_count
 
         # ----------------------------------------------------
         # SCORE EACH PATTERN
@@ -1103,12 +1063,24 @@ class Board:
         has_gold_rush = has_charm(owned_charms, "Gold Rush")
 
         processed_patterns = []
-
+        total_matches = 0
         for pattern, cells in chosen:
             pattern_sum = sum(self.grid[x][y].current_value for x, y in cells)
 
             # Fusion modifiers: symbol modifiers and pattern modifiers carry through the round.
             scored_symbols = [self.grid[x][y] for x, y in cells]
+            # ========================================================
+            # RECHARGE MODIFIER EFFECT
+            # ========================================================
+
+            recharge_count = sum(
+                1 for s in scored_symbols
+                if "recharge" in s.modifiers
+            )
+
+            for _ in range(recharge_count):
+                self.apply_recharge_modifier(owned_charms)
+            
             scored_symbol_types = set(type(s) for s in scored_symbols)
 
             for sym in scored_symbols:
@@ -1122,7 +1094,44 @@ class Board:
                 print(f"Pattern modifier triggered: {pattern.name} multiplier +1 until end of round.")
                 sleep(0.2)
 
-            pattern_score = pattern.get_multiplier(pattern_sum) * triggers
+            # Pattern-local retrigger bonus
+            local_triggers = triggers
+
+            repeat_count = sum(
+                1 for s in scored_symbols
+                if "repetition" in s.modifiers
+            )
+
+            if repeat_count > 0:
+                print(f"Repetition modifier retriggered {pattern.name} +{repeat_count}")
+                sleep(0.25)
+
+            local_triggers += repeat_count
+
+            # ========================================================
+            # REPETITION RETRIGGER LOGIC
+            # ========================================================
+
+            # Count repetition symbols in this pattern
+            repeat_count = sum(
+                1 for s in scored_symbols
+                if "repetition" in s.modifiers
+            )
+
+            # Add retriggers equal to repeat symbols
+            if repeat_count > 0:
+                local_triggers += repeat_count
+
+                print(
+                    f"Repetition modifier retriggered "
+                    f"{pattern.name} +{repeat_count} time(s)!"
+                )
+                sleep(0.25)
+
+            total_matches += local_triggers
+
+            # Final score
+            pattern_score = pattern.get_multiplier(pattern_sum) * local_triggers
             self.print_board(pattern_cells=[(pattern.name, cells)], pattern_score=pattern_score, spin_number=spin_number)
             total += pattern_score
             # ------------------------------------------------
@@ -1140,7 +1149,7 @@ class Board:
                     pending_increases[stype] = pending_increases.get(stype, 0) + s.base_value
 
                 for stype, increase in pending_increases.items():
-                    total_increase = increase * triggers
+                    total_increase = increase * local_triggers
                     self.delayed_bonuses.append({
                         "symbol_type": stype,
                         "increase": total_increase,
@@ -1187,7 +1196,6 @@ class Board:
         # ----------------------------------------------------
         # FINAL OUTPUT
         # ----------------------------------------------------
-        total_matches = patterns_this_spin * triggers
         print("\n=========================")
         print(f"Total Matches: {total_matches}")
         print(f"Total Value: {total}")
@@ -2020,7 +2028,7 @@ More_Coding = Charm(
 
 Python = Charm(
     "Python",
-    "Gives symbols +base value every time an epic or legendary charm is used",
+    "Gives symbols +base value every time a code charm is used",
     kind="code_python",
     rarity="epic"
 )
@@ -2993,7 +3001,7 @@ class DeadlineSystem:
 
     def get_deadline_amount(self, deadline_num):
         """Calculate deadline amount based on deadline number."""
-        return int(100 * (4 ** (deadline_num - 1)))
+        return int(1200 * (4 ** (deadline_num - 1)))
 
     def get_current_total(self):
         """Return the current amount owed."""
@@ -3091,6 +3099,7 @@ def main():
             continue
 
         spins = choice
+        spins_left = choice
         board.start_round()
         money -= spins
 
@@ -3113,7 +3122,7 @@ def main():
             board.display_total(owned_charms, spin_number=i+1)
             patterns_scored_this_round += board.patterns_scored_this_spin
 
-            if spins != 0 and has_available_cooldown_charms(owned_charms):
+            if spins_left != 0 and has_available_cooldown_charms(owned_charms):
                 print("\n📜 Activate charms? (type 'charm' to activate, or press Enter to skip)")
                 charm_input = input("> ").strip().lower()
                 if charm_input == "charm":
@@ -3138,6 +3147,7 @@ def main():
 
             if i + 1 < spins:
                 input("Press Enter to spin again...")
+                spins_left -= 1
 
         # Decrement round after all spins are completed
         deadlines.decrement_round()
