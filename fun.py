@@ -637,127 +637,206 @@ PATTERNS = [
     Jackpot()
 ]
 
-
-# ============================================================
-# BOARD SYSTEM
-# ============================================================
-
 class Board:
     """
-    The Board manages:
-      - Grid of symbols
-      - Filling and activating symbols
-      - Applying global bonuses
-      - Pattern detection
-      - Pattern scoring
-      - Golden modifier logic
-      - Delayed gold bonus system (stacking)
+    Effect-driven Board system.
+
+    - Charms unlock modifiers
+    - Board executes effects
+    - Scoring system restored (pattern detection + highlight)
     """
 
+    # ============================================================
+    # INIT
+    # ============================================================
+
     def __init__(self, rows, cols):
+
         self.rows = rows
         self.cols = cols
+
         self.grid = [[None for _ in range(cols)] for _ in range(rows)]
-
-        # Permanent bonuses applied to all symbols of a type
-        self.global_symbol_bonuses = {}  # {SymbolClass: int}
-        self.round_symbol_bonuses = {}   # {SymbolClass: int}
-
-        # Delayed bonuses (stacking)
-        self.delayed_bonuses = []  # list of dicts:
-        # {
-        #   "symbol_type": Coin or Dice,
-        #   "increase": int,
-        #   "delay": int
-        # }
-
         self.grand_total = 0
 
-    # --------------------------------------------------------
-    # APPLY PENDING BONUSES (start of each spin)
-    # --------------------------------------------------------
-
-    def apply_pending_bonuses(self):
-        """
-        Apply any delayed bonuses whose delay has expired.
-        """
-        to_apply = [b for b in self.delayed_bonuses if b["delay"] <= 0]
-
-        if to_apply:
-            print("Applying delayed bonuses for this spin...")
-
-        for bonus in to_apply:
-            stype = bonus["symbol_type"]
-            inc = bonus["increase"]
-
-            self.global_symbol_bonuses[stype] = (
-                self.global_symbol_bonuses.get(stype, 0) + inc
-            )
-
-            print(f"Delayed bonus applied! All {stype.__name__}s gain +{inc} permanently.")
-            sleep(.3)
-
-        # Remove applied bonuses
-        self.delayed_bonuses = [b for b in self.delayed_bonuses if b["delay"] > 0]
-
-    # --------------------------------------------------------
-    # START ROUND
-    # --------------------------------------------------------
-
-    def start_round(self):
-        """Reset round-scoped fusion modifier effects."""
-        self.round_symbol_bonuses = {}
-        for pattern in PATTERNS:
-            pattern.current_multiplier_value = pattern.base_multiplier_value
-
-    def get_modifier_rarity_rank(self, modifiers):
-        """Return a rarity rank for a set of modifiers."""
-        rank_map = {
-            "gold": 5,
-            "recharge": 4,
-            "repetition": 3,
-            "pattern_mult": 2,
-            "symbol_mult": 1,
-            "mimic": 0
+        # -----------------------------
+        # MODIFIER UNLOCK STATE
+        # -----------------------------
+        self.modifier_unlocked = {
+            "repetition": False,
+            "recharge": False,
+            "chain": False,
+            "symbol_mult": False,
+            "pattern_mult": False,
         }
-        return max((rank_map.get(mod, 0) for mod in modifiers), default=0)
 
-    def apply_mimic_modifier(self, symbol, x, y):
-        """Copy the nearest modifier from an existing symbol on the board."""
-        best_source = None
-        best_distance = None
-        best_rank = -1
+        # -----------------------------
+        # MODIFIER DATA
+        # -----------------------------
+        self.repetition_map = {}
+        self.recharge_pool = []
+        self.chain_map = {}
 
-        for i in range(self.rows):
-            for j in range(self.cols):
-                candidate = self.grid[i][j]
-                if candidate is None or candidate is symbol:
-                    continue
-                candidate_mods = [m for m in candidate.modifiers if m != "mimic"]
-                if not candidate_mods:
-                    continue
+        self.symbol_mult = 1
+        self.pattern_mult = 1
 
-                distance = abs(x - i) + abs(y - j)
-                rank = self.get_modifier_rarity_rank(candidate_mods)
+        self.delayed_bonuses = []
 
-                if best_source is None or distance < best_distance or (distance == best_distance and rank > best_rank):
-                    best_source = candidate
-                    best_distance = distance
-                    best_rank = rank
+    # ============================================================
+    # CONTROL
+    # ============================================================
 
-        if best_source:
-            copied_mods = [m for m in best_source.modifiers if m != "mimic"]
-            symbol.modifiers.extend(copied_mods)
-            if copied_mods:
-                symbol.display_name += " [MIMIC:" + ",".join(copied_mods) + "]"
+    def unlock(self, name):
+        if name in self.modifier_unlocked:
+            self.modifier_unlocked[name] = True
 
-    # --------------------------------------------------------
-    # FILL BOARD WITH SYMBOLS
-    # --------------------------------------------------------
+    def has(self, name):
+        return self.modifier_unlocked.get(name, False)
 
-    def fill_cells(self, symbol_classes, weights, owned_charms, active_bonuses):
+    # ============================================================
+    # CHARM SYSTEM
+    # ============================================================
 
-        weights_list = [weights[cls] for cls in symbol_classes]
+    def apply_charm(self, charm):
+        for effect in charm.effects:
+            self.apply_effect(effect)
+
+    def apply_effect(self, effect):
+
+        if effect.type == "UNLOCK":
+            self.unlock(effect.target)
+
+        elif effect.type == "ADD_REPETITION":
+            self.unlock("repetition")
+
+            targets = effect.target
+            if not isinstance(targets, tuple):
+                targets = (targets,)
+
+            for t in targets:
+                self.repetition_map[t.__name__] = (
+                    self.repetition_map.get(t.__name__, 0)
+                    + effect.amount
+                )
+
+        elif effect.type == "ADD_RECHARGE":
+            self.unlock("recharge")
+
+            targets = effect.target
+            if not isinstance(targets, tuple):
+                targets = (targets,)
+
+            for t in targets:
+                if t not in self.recharge_pool:
+                    self.recharge_pool.append(t)
+
+        elif effect.type == "ADD_CHAIN":
+            self.unlock("chain")
+
+            targets = effect.target
+            if not isinstance(targets, tuple):
+                targets = (targets,)
+
+            for t in targets:
+                self.chain_map[t.__name__] = (
+                    self.chain_map.get(t.__name__, 0)
+                    + effect.amount
+                )
+
+        elif effect.type == "ADD_SYMBOL_MULT":
+            self.unlock("symbol_mult")
+            self.symbol_mult += effect.amount
+
+        elif effect.type == "ADD_PATTERN_MULT":
+            self.unlock("pattern_mult")
+            self.pattern_mult += effect.amount
+
+    # ============================================================
+    # CONTROL HUB
+    # ============================================================
+
+    def print_modifier_hub(self):
+
+        print("\n=== MODIFIER HUB ===")
+
+        if self.has("repetition"):
+            print("Repetition:", self.repetition_map or "none")
+
+        if self.has("recharge"):
+            print("Recharge:", [c.__name__ for c in self.recharge_pool] or "none")
+
+        if self.has("chain"):
+            print("Chain:", self.chain_map or "none")
+
+        if self.has("symbol_mult"):
+            print("Symbol Mult:", self.symbol_mult)
+
+        if self.has("pattern_mult"):
+            print("Pattern Mult:", self.pattern_mult)
+
+    # ============================================================
+    # PATTERN SCORING CORE
+    # ============================================================
+
+    def calculate_pattern_score(self, pattern, base_score):
+
+        score = base_score
+
+        if self.has("chain"):
+            score += self.chain_map.get(pattern.name, 0)
+
+        if self.has("pattern_mult"):
+            score *= self.pattern_mult
+
+        return score
+
+    # ============================================================
+    # PATTERN ACTIVATION
+    # ============================================================
+
+    def activate_pattern(self, pattern, base_score, highlight_cells=None):
+
+        base = self.calculate_pattern_score(pattern, base_score)
+        repeats = self.repetition_map.get(pattern.name, 0)
+
+        total = base
+
+        print(f"\n{pattern.name} -> {base}")
+
+        # highlight main trigger
+        self.print_board(highlight_cells, base)
+
+        # repetition triggers
+        for i in range(repeats):
+            extra = self.calculate_pattern_score(pattern, base_score)
+            print(f"Repeat {i+1}: {extra}")
+            total += extra
+
+            self.print_board(highlight_cells, extra)
+
+        self.grand_total += total
+
+        if self.has("chain"):
+            self.chain_map[pattern.name] = self.chain_map.get(pattern.name, 0) + pattern.base_value
+
+        if self.has("recharge"):
+            self.trigger_recharge()
+
+    # ============================================================
+    # RECHARGE
+    # ============================================================
+
+    def trigger_recharge(self):
+        if not self.recharge_pool:
+            return
+
+        chosen = random.choice(self.recharge_pool)
+        print(f"{chosen.__name__} gains +1 charge!")
+
+    # ============================================================
+    # GRID
+    # ============================================================
+
+    def fill_board(self, symbol_classes, weights):
 
         for x in range(self.rows):
             for y in range(self.cols):
@@ -765,484 +844,105 @@ class Board:
                 if self.grid[x][y] is not None:
                     continue
 
-                symbol_class = random.choices(
+                self.grid[x][y] = random.choices(
                     symbol_classes,
-                    weights=weights_list,
+                    weights=weights,
                     k=1
                 )[0]
 
-                symbol = self.build_symbol(symbol_class, x, y, owned_charms)
-
-                self.grid[x][y] = symbol
-
-    # --------------------------------------------------------
+    # ============================================================
     # SPIN
-    # --------------------------------------------------------
+    # ============================================================
 
-    def current_spin(self, symbol_classes, weights, owned_charms, active_bonuses, spin_luck, spin_number=None):
-        """
-        Perform a new spin:
-            - Apply pending bonuses
-            - Reset grid
-            - Fill grid
-        """
-        self.apply_pending_bonuses()
+    def spin(self, symbol_classes, weights):
 
         self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]
-        self.fill_cells(symbol_classes, weights, owned_charms, active_bonuses)
-        self.apply_luck_manifestation(spin_luck)
-        self.print_board(spin_number=spin_number)
-        sleep(0.1)
+        self.fill_board(symbol_classes, weights)
 
-        def apply_luck_manifestation(self, luck_amount):
-
-    if luck_amount <= 1:
-        return
-
-    desired = min(luck_amount, self.rows * self.cols)
-
-    counts = {}
-    for x in range(self.rows):
-        for y in range(self.cols):
-            symbol = self.grid[x][y]
-            t = type(symbol)
-            counts[t] = counts.get(t, 0) + 1
-
-    if not counts:
-        return
-
-    target_type = max(counts, key=lambda t: (counts[t], t().base_value))
-    current_count = counts[target_type]
-
-    if current_count >= desired:
-        return
-
-    needed = desired - current_count
-
-    candidates = [
-        (x, y)
-        for x in range(self.rows)
-        for y in range(self.cols)
-        if type(self.grid[x][y]) != target_type
-    ]
-
-    random.shuffle(candidates)
-
-    for x, y in candidates[:needed]:
-        symbol = self.build_symbol(target_type, x, y, owned_charms)
-        self.grid[x][y] = symbol
-
-    print(f"Luck forced {desired}x {target_type.__name__} on board (luck={luck_amount}).")
-
-            # =================================================
-            # MODIFIERS (REFACTORED SYSTEM)
-            # =================================================
-
-            def roll(chance):
-                return chance and random.randint(1, 100) <= chance
-
-            # SYMBOL
-            if roll(symbol_modifier_chance):
-                symbol.modifiers.append("symbol_mult")
-                symbol.current_value += symbol.base_value
-                symbol.display_name += " [SYMBOL]"
-
-            # PATTERN
-            if roll(pattern_modifier_chance):
-                symbol.modifiers.append("pattern_mult")
-                symbol.display_name += " [PATTERN]"
-
-            # MIMIC
-            if roll(mimic_modifier_chance):
-                symbol.modifiers.append("mimic")
-                self.apply_mimic_modifier(symbol, x, y)
-
-            # BATTERY
-            can_receive_battery = battery_all_symbols or isinstance(symbol, Dice)
-
-            if (
-                battery_enabled
-                and can_receive_battery
-                and roll(battery_chance)
-            ):
-                symbol.modifiers.append("recharge")
-                symbol.display_name += " [RECHARGE]"
-
-            # REPETITION
-            if repetition_enabled and roll(repetition_chance):
-                symbol.modifiers.append("repetition")
-                symbol.display_name += " [REPEAT]"
-
-            # AGAINAGAINAGAIN
-            if has_AGAINAGAINAGAIN and isinstance(symbol, tuple(REPETITION_TARGETS)):
-                if "repetition" not in symbol.modifiers:
-                    symbol.modifiers.append("repetition")
-                if "[REPEAT]" not in symbol.display_name:
-                    symbol.display_name += " [REPEAT]"
-
-            # GOLDEN
-            cfg = GOLDEN_CONFIG.get(type(symbol))
-            if cfg:
-                enabled, chance = cfg
-                if enabled and roll(chance):
-                    symbol.is_golden = True
-                    symbol.display_name += " [GOLD]"
-                        self.grid[x][y] = symbol
-
-                    print(f"Luck forced {desired}x {target_type.__name__} on board (luck={luck_amount}).")
-
-    # --------------------------------------------------------
-    # PRINT BOARD
-    # --------------------------------------------------------
-
-    def print_board(self, pattern_cells=None, pattern_score=None, spin_number=None):
-        print(ANSI_CLEAR_SCREEN, end="")
-        sleep(0.05)
-
-        if spin_number is not None:
-            print()
-            print(f"--- SPIN {spin_number} ---")
         print("\n=== BOARD ===")
+        for row in self.grid:
+            print(" | ".join(s.display_name for s in row))
 
-        highlighted_cells = set()
-        score_row = None
-        if pattern_cells:
-            highlighted_cells = {
-                (x, y)
-                for _, cells in pattern_cells
-                for x, y in cells
-            }
-            if pattern_score is not None:
-                for x, cells in pattern_cells:
-                    if cells:
-                        score_row = min(x for x, _ in cells)
-                        break
+        self.print_modifier_hub()
 
-        for x, row in enumerate(self.grid):
-            row_cells = []
-            for y, s in enumerate(row):
-                cell_text = f"{s.display_name:14}"
-                if (x, y) in highlighted_cells:
-                    cell_text = f"{ANSI_RED}{cell_text}{ANSI_RESET}"
-                row_cells.append(cell_text)
+    # ============================================================
+    # FULL SCORING + HIGHLIGHT SYSTEM
+    # ============================================================
 
-            line = " | ".join(row_cells)
-            if score_row == x and pattern_score is not None:
-                line = f"{line}    Score: {pattern_score}"
-            print(line)
-
-        print("=============")
-        sleep(.3)
-        if pattern_cells:
-            sleep(.3)
-        print()
-
-    # --------------------------------------------------------
-    # SCORING
-    # --------------------------------------------------------
-
-    def display_total(self, owned_charms, spin_number=None):
+    def display_total(self, patterns):
         """
-        Score all patterns:
-            - Detect matches
-            - Apply golden modifier
-            - Apply retrigger logic
-            - Add delayed bonuses
-        Returns the number of patterns scored this spin (stored as instance variable).
+        patterns = list of (pattern, cells)
         """
-        self.patterns_scored_this_spin = 0  # Initialize counter
 
         total = 0
-        all_matches = []
 
-        # ----------------------------------------------------
-        # FIND ALL MATCHES
-        # ----------------------------------------------------
-        for pattern in PATTERNS:
-            matches = pattern.matches(self.grid)
-            for cells in matches:
-                all_matches.append((pattern, cells))
+        for pattern, cells in patterns:
 
-        # Sort by size (largest first)
-        all_matches.sort(key=lambda x: -len(x[1]))
+            base_score = sum(self.grid[x][y].current_value for x, y in cells)
 
-        # Check for achievements
-        if any(pattern.name == "Jackpot" for pattern, _ in all_matches):
-            add_achievement("Score a Jackpot")
+            score = self.calculate_pattern_score(pattern, base_score)
 
-        # ----------------------------------------------------
-        # SELECT MATCHES
-        # ----------------------------------------------------
-        chosen = []
+            print(f"{pattern.name} scored {score}")
 
-        def is_contained_in_non_jackpot(candidate_cells):
-            return any(
-                candidate_cells <= outer_cells and outer_pattern.name != "Jackpot"
-                for outer_pattern, outer_cells in chosen
-            )
+            self.print_board(cells, score)
 
-        for pattern, cells in all_matches:
-            if is_contained_in_non_jackpot(cells):
-                continue
+            total += score
 
-            chosen.append((pattern, cells))
-
-        # Store for print output
-        self.last_patterns = chosen
-
-        # ----------------------------------------------------
-        # RETRIGGER LOGIC
-        # Multiple charm types can trigger pattern retriggering
-        # Each charm has its own activation conditions
-        # ----------------------------------------------------
-        retrigger_count = 0
-        retrigger_sources = []
-        
-        # I'm Bad at Math: 35% chance to trigger
-        for d in owned_charms:
-            if d['charm'].kind == "retrigger" and d['charm'].name != "Pattern Pulse" and d['charm'].name != "Lucky Coin Math" and random.randint(1, 100) <= 35:
-                retrigger_count += 1
-                retrigger_sources.append("I'm Bad at Math")
-        
-        # NOCHANGE: Patterns with non-Coin symbols trigger once more (cooldown 4)
-        for d in owned_charms:
-            if d['charm'].name == "NOCHANGE" and d['cooldown'] == 0:
-                # Check if any pattern has non-Coin symbols
-                for pattern, cells in chosen:
-                    has_non_coin = any(not isinstance(self.grid[x][y], Coin) for x, y in cells)
-                    if has_non_coin:
-                        retrigger_count += 1
-                        retrigger_sources.append("NOCHANGE")
-                        d['cooldown'] = d['charm'].cooldown_rounds
-                        break
-        
-        # Coin Rush: Patterns with only Coins trigger two more times (cooldown 5)
-        for d in owned_charms:
-            if d['charm'].name == "Coin Rush" and d['cooldown'] == 0:
-                # Check if any pattern has only Coin symbols
-                for pattern, cells in chosen:
-                    all_coins = all(isinstance(self.grid[x][y], Coin) for x, y in cells)
-                    if all_coins:
-                        retrigger_count += 2
-                        retrigger_sources.append("Coin Rush")
-                        d['cooldown'] = d['charm'].cooldown_rounds
-                        break
-        
-        # Pattern Pulse: 70% chance to trigger once more if 10+ patterns this spin
-        if len(chosen) >= 10:
-            for d in owned_charms:
-                if d['charm'].name == "Pattern Pulse" and random.randint(1, 100) <= 70:
-                    retrigger_count += 1
-                    retrigger_sources.append("Pattern Pulse")
-                    break
-        
-        # Lucky Coin Math: 30% chance to trigger once more if pattern contains a Coin
-        for d in owned_charms:
-            if d['charm'].name == "Lucky Coin Math":
-                for pattern, cells in chosen:
-                    has_coin = any(isinstance(self.grid[x][y], Coin) for x, y in cells)
-                    if has_coin and random.randint(1, 100) <= 30:
-                        retrigger_count += 1
-                        retrigger_sources.append("Lucky Coin Math")
-                        break
-        
-        
-
-        if retrigger_count > 0:
-            sources_str = ", ".join(dict.fromkeys(retrigger_sources))  # Remove duplicates while preserving order
-            print(f"✨ {sources_str} activated! Retriggering patterns {retrigger_count} more time(s)...")
-            sleep(0.75)
-        
-        triggers = 1 + retrigger_count
-
-        # ----------------------------------------------------
-        # SCORE EACH PATTERN
-        # ----------------------------------------------------
-        patterns_this_spin = len(chosen)
-
-        has_gold_rush = has_charm(owned_charms, "Gold Rush")
-
-        processed_patterns = []
-        total_matches = 0
-        for pattern, cells in chosen:
-            pattern_sum = sum(self.grid[x][y].current_value for x, y in cells)
-
-            # Fusion modifiers: symbol modifiers and pattern modifiers carry through the round.
-            scored_symbols = [self.grid[x][y] for x, y in cells]
-            # ========================================================
-            # RECHARGE MODIFIER EFFECT
-            # ========================================================
-
-            recharge_count = sum(
-                1 for s in scored_symbols
-                if "recharge" in s.modifiers
-            )
-
-            for _ in range(recharge_count):
-                self.apply_recharge_modifier(owned_charms)
-            
-            scored_symbol_types = set(type(s) for s in scored_symbols)
-
-            for sym in scored_symbols:
-                if "symbol_mult" in sym.modifiers:
-                    self.round_symbol_bonuses[type(sym)] = self.round_symbol_bonuses.get(type(sym), 0) + 1
-                    print(f"Symbol modifier triggered: all {type(sym).__name__}s gain +1 multiplier until end of round.")
-                    sleep(0.2)
-
-            if any("pattern_mult" in sym.modifiers for sym in scored_symbols):
-                pattern.current_multiplier_value += 1
-                print(f"Pattern modifier triggered: {pattern.name} multiplier +1 until end of round.")
-                sleep(0.2)
-
-            # Pattern-local retrigger bonus
-            local_triggers = triggers
-
-            repeat_count = sum(
-                1 for s in scored_symbols
-                if "repetition" in s.modifiers
-            )
-
-            if repeat_count > 0:
-                print(f"Repetition modifier retriggered {pattern.name} +{repeat_count}")
-                sleep(0.25)
-
-            local_triggers += repeat_count
-
-            # ========================================================
-            # REPETITION RETRIGGER LOGIC
-            # ========================================================
-
-            # Count repetition symbols in this pattern
-            repeat_count = sum(
-                1 for s in scored_symbols
-                if "repetition" in s.modifiers
-            )
-
-            # Add retriggers equal to repeat symbols
-            if repeat_count > 0:
-                local_triggers += repeat_count
-
-                print(
-                    f"Repetition modifier retriggered "
-                    f"{pattern.name} +{repeat_count} time(s)!"
-                )
-                sleep(0.25)
-
-            total_matches += local_triggers
-
-            # Final score
-            pattern_score = pattern.get_multiplier(pattern_sum) * local_triggers
-            self.print_board(pattern_cells=[(pattern.name, cells)], pattern_score=pattern_score, spin_number=spin_number)
-            total += pattern_score
-            # ------------------------------------------------
-            # GOLDEN MODIFIER: base behavior (without Gold Rush charm)
-            # For every GOLD symbol in the scored pattern, queue a delayed
-            # permanent bonus of +base_value for that symbol type. Multiple
-            # GOLD symbols stack; retriggers multiply the total queued amount.
-            # The queued bonuses are applied at the start of the next spin.
-            # ------------------------------------------------
-            golden_symbols = [self.grid[x][y] for x, y in cells if self.grid[x][y].is_golden]
-            if golden_symbols:
-                pending_increases = {}
-                for s in golden_symbols:
-                    stype = type(s)
-                    pending_increases[stype] = pending_increases.get(stype, 0) + s.base_value
-
-                for stype, increase in pending_increases.items():
-                    total_increase = increase * local_triggers
-                    self.delayed_bonuses.append({
-                        "symbol_type": stype,
-                        "increase": total_increase,
-                        "delay": 1
-                    })
-                    print(
-                        f"Golden modifier queued! A delayed +{total_increase} bonus for all {stype.__name__}s has been queued for the next spin."
-                    )
-                    sleep(0.5)
-
-            # Append this scored pattern to processed list and handle Gold Rush
-            processed_patterns.append((pattern, cells))
-
-            # Gold Rush special: once at least 10 patterns have been scored in
-            # this spin, each subsequent scored pattern causes the aggregated
-            # GOLD base_values from the previous ten scored patterns to be
-            # immediately applied permanently to their symbol types. This
-            # happens for every pattern after the tenth (inclusive).
-            if has_gold_rush and len(processed_patterns) >= 10:
-                # Use the first ten scored patterns of this spin for aggregation
-                first_ten = processed_patterns[:10]
-                agg = {}
-                for _, pcells in first_ten:
-                    for x, y in pcells:
-                        s = self.grid[x][y]
-                        if s.is_golden:
-                            stype = type(s)
-                            agg[stype] = agg.get(stype, 0) + s.base_value
-
-                if agg:
-                    print("Gold Rush active: applying aggregated bonuses from the first 10 patterns immediately:")
-                    for stype, inc in agg.items():
-                        self.global_symbol_bonuses[stype] = self.global_symbol_bonuses.get(stype, 0) + inc
-                        print(f"  +{inc} permanently applied to all {stype.__name__}s")
-
-            sleep(0.25)
-
-        # ----------------------------------------------------
-        # UPDATE DELAYED BONUSES
-        # ----------------------------------------------------
-        for bonus in self.delayed_bonuses:
-            bonus["delay"] -= 1
-
-        # ----------------------------------------------------
-        # FINAL OUTPUT
-        # ----------------------------------------------------
-        print("\n=========================")
-        print(f"Total Matches: {total_matches}")
-        print(f"Total Value: {total}")
-        print("=========================\n")
-        sleep(.3)
         self.grand_total += total
-        self.patterns_scored_this_spin = total_matches
         return total
 
+    # ============================================================
+    # BOARD PRINT WITH HIGHLIGHT
+    # ============================================================
+
+    def print_board(self, highlight_cells=None, pattern_score=None):
+
+        print("\n=== BOARD ===")
+
+        highlight = set(highlight_cells or [])
+
+        for x, row in enumerate(self.grid):
+            line = []
+            for y, s in enumerate(row):
+
+                text = f"{s.display_name:14}"
+
+                if (x, y) in highlight:
+                    text = f"[{text}]"
+
+                line.append(text)
+
+            print(" | ".join(line))
+
+        if pattern_score is not None:
+            print(f"\nScore: {pattern_score}")
 
 # ============================================================
 # CHARM SYSTEM
 # ============================================================
 
 class Charm:
-    """
-    A charm modifies gameplay in one of several ways:
-      - extra_spin: +1 max spin per round
-      - weight_active: increases spawn weight of a symbol type
-      - modifier: chance for symbols to spawn golden
-      - symbol_modifier_chance: chance for symbols to spawn with +1 symbol mult until end round
-      - pattern_modifier_chance: chance for symbols to spawn with +1 pattern mult until end round
-      - mimic_modifier_chance: chance for symbols to spawn with a mimic modifier that copies the nearest modifier
-      - fusion_amplifier: increases fusion modifier chances
-      - retrigger: patterns trigger one extra time
-      - cooldown: has cooldown-based activation
-      - passive: always active
-      - trait: applies modifier to other charms
-    """
+    def __init__(
+        self,
+        name,
+        description,
+        kind=None,          # KEEP for now (deprecated)
+        target=None,
+        amount=0,
+        chance=None,
+        rarity="common",
+        weight=None,         # <-- IMPORTANT: your system likely uses this
+        effects=None        # NEW SYSTEM (optional)
+    ):
 
-    def __init__(self, name, description, kind, target=None, amount=0, cooldown_rounds=0, rarity="common", chance=None, spins=1, max_amount=None):
         self.name = name
         self.description = description
-        self.kind = kind  # can be a comma-separated string like 'luck,extra_spin'
         self.target = target
         self.amount = amount
-        self.cooldown_rounds = cooldown_rounds
-        self.rarity = rarity
-        # Optional: activation chance (percentage) for chance-based charms
         self.chance = chance
-        # Optional: number of spins this charm's luck effect should last when triggered
-        self.spins = spins
-        # Optional: maximum amount (used by some charms)
-        self.max_amount = max_amount
-
-    def __str__(self):
-        return f"{self.name}: {self.description}"
+        self.rarity = rarity
+        self.weight = weight
+        self.effects = effects or []
 
 
 # ============================================================
@@ -1253,9 +953,9 @@ class Charm:
 Tomato = Charm(
     "Tomato",
     "+3 luck for next spin (17.5% trigger chance)",
-    kind="luck",
-    amount=3,
-    chance=17.5,
+    effects = [
+        Effect(LUCK, target = None, )
+    ]
     rarity="common"
 )
 
@@ -1589,8 +1289,8 @@ TakeSpace = Charm(
 
 I_cant_stop_winning = Charm(
     "I can't stop winning",
-    "13% chance for Wheel and Card to have the blue modifier (blue modifier increases the pattern scored's value by its base value)",
-    kind="blue_modifier",
+    "13% chance for Wheel and Card to have the chain modifier (chain modifier increases the pattern scored's value by its base value)",
+    kind="chain_modifier",
     target=(Wheel, Card),
     amount=13,
     rarity="uncommon"
@@ -2977,6 +2677,112 @@ def count_charm_by_rarity(owned_charms, rarity):
     """Count how many charms of a specific rarity the player has."""
     return sum(1 for d in owned_charms if d['charm'].rarity == rarity)
 
+class CharmResolver:
+    """
+    Converts Charms into executable Effects for the Board.
+    This is the ONLY place that understands 'kind', chance, cooldown, etc.
+    """
+
+    def __init__(self):
+        pass
+
+    # --------------------------------------------------------
+    # MAIN ENTRY
+    # --------------------------------------------------------
+
+    def resolve(self, charm, context=None):
+        """
+        Returns a list of Effects (may be empty).
+        """
+
+        effects = []
+
+        # ----------------------------
+        # LEGACY SYSTEM (kind-based)
+        # ----------------------------
+        if hasattr(charm, "kind") and charm.kind:
+
+            kinds = charm.kind.split(",")
+
+            for k in kinds:
+                k = k.strip()
+
+                # ---------------- REPETITION ----------------
+                if k == "repetition_modifier":
+                    if self.roll(charm.chance):
+                        effects.append(
+                            Effect(
+                                "ADD_REPETITION",
+                                target=charm.target,
+                                amount=1
+                            )
+                        )
+
+                # ---------------- CHAIN ----------------
+                elif k == "chain_modifier":
+                    if self.roll(charm.chance):
+                        effects.append(
+                            Effect(
+                                "ADD_CHAIN",
+                                target=charm.target,
+                                amount=1
+                            )
+                        )
+
+                # ---------------- SYMBOL MULT ----------------
+                elif k == "symbol_xmult":
+                    effects.append(
+                        Effect(
+                            "ADD_SYMBOL_MULT",
+                            amount=charm.amount
+                        )
+                    )
+
+                # ---------------- PATTERN MULT ----------------
+                elif k == "patterns_mult":
+                    effects.append(
+                        Effect(
+                            "ADD_PATTERN_MULT",
+                            amount=charm.amount or 1
+                        )
+                    )
+
+                # ---------------- RECHARGE ----------------
+                elif k == "recharge_modifier":
+                    if self.roll(charm.chance):
+                        effects.append(
+                            Effect(
+                                "ADD_RECHARGE_TARGET",
+                                target=charm.target,
+                                amount=1
+                            )
+                        )
+
+                # ---------------- UNHANDLED KINDS ----------------
+                else:
+                    # You can log this for debugging future charms
+                    pass
+
+        # ----------------------------
+        # FUTURE SYSTEM (effects-based)
+        # ----------------------------
+        if hasattr(charm, "effects") and charm.effects:
+            # already modern charm → pass-through
+            return charm.effects
+
+        return effects
+
+    # --------------------------------------------------------
+    # UTILITIES
+    # --------------------------------------------------------
+
+    def roll(self, chance):
+        """
+        Standard percent roll helper.
+        """
+        if chance is None:
+            return True
+        return random.randint(1, 100) <= chance
 
 # ============================================================
 # DEADLINE SYSTEM
