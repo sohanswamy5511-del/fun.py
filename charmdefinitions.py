@@ -4,7 +4,7 @@ from charms import Charm
 from effects import Effect, EffectType, Trigger
 from symbol import Coin, Spinner, Wheel, Dice, Card, Seven
 from conditions import FirstSpinAfterCharmBought, NoLargePatternSpins, NoPatternSpins, NumPatternScored, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup
-from pattern import VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SPOON_PATTERNS, N_PATTERNS, X_PATTERNS, Jackpot
+from pattern import Pattern, VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SPOON_PATTERNS, N_PATTERNS, X_PATTERNS, Jackpot
 # ============================================================
 # CHARM DEFINITIONS - COMMON TIER (50% spawn rate base) (30% with upgrade)
 # ============================================================
@@ -974,7 +974,7 @@ DoubleCoinValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(5) if pattern.symbols == [Coin] * 5 else None
+            condition=NumPatternScored(5) if Pattern.symbols == [Coin] * 5 else None
         )
     ],
     rarity="rare"
