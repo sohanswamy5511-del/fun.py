@@ -1,7 +1,9 @@
+from os import name
+
 from charms import Charm
 from effects import Effect, EffectType, Trigger
 from symbol import Coin, Spinner, Wheel, Dice, Card, Seven
-from conditions import NoLargePatternSpins, NoPatternSpins
+from conditions import FirstSpinAfterCharmBought, NoLargePatternSpins, NoPatternSpins, NumPatternScored, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup
 from pattern import VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SPOON_PATTERNS, N_PATTERNS, X_PATTERNS, Jackpot
 # ============================================================
 # CHARM DEFINITIONS - COMMON TIER (50% spawn rate base) (30% with upgrade)
@@ -13,15 +15,13 @@ Tomato = Charm(
     name="Tomato",
     description="+3 luck for next spin (17.5% trigger chance)",
     effects=[
-
         Effect(
-            EffectType.LUCK,
+            type=EffectType.LUCK,
             amount=3,
-            chance=17.5
+            chance=17.5,
+            trigger=Trigger.ON_SPIN_END
         )
-
     ],
-
     rarity="common"
 )
 
@@ -30,9 +30,10 @@ Peach = Charm(
     description="+5 luck for next spin (10% trigger chance)",
     effects=[
         Effect(
-            EffectType.LUCK,
+            type=EffectType.LUCK,
             amount=5,
-            chance=10
+            chance=10,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -44,10 +45,11 @@ GoldenWheels = Charm(
     description="25% chance for Wheels to spawn with GOLD modifier",
     effects=[
         Effect(
-            EffectType.GOLD_MODIFIER,
+            type=EffectType.GOLD_MODIFIER,
             amount=25,
             chance=25,
-            target=Wheel
+            target=Wheel,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -58,10 +60,11 @@ GoldenDice = Charm(
     description="20% chance for Dice to spawn with GOLD modifier",
     effects=[
         Effect(
-            EffectType.GOLD_MODIFIER,
+            type=EffectType.GOLD_MODIFIER,
             amount=20,
             chance=20,
-            target=Dice
+            target=Dice,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -72,10 +75,11 @@ GoldenCoins = Charm(
     description="25% chance for Coins to spawn with GOLD modifier",
     effects=[
         Effect(
-            EffectType.GOLD_MODIFIER,
+            type=EffectType.GOLD_MODIFIER,
             amount=25,
             chance=25,
-            target=Coin
+            target=Coin,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -86,10 +90,11 @@ GoldenSpinners = Charm(
     description="30% chance for Spinners to spawn with GOLD modifier",
     effects=[
         Effect(
-            EffectType.GOLD_MODIFIER,
+            type=EffectType.GOLD_MODIFIER,
             amount=30,
             chance=30,
-            target=Spinner
+            target=Spinner,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -100,24 +105,11 @@ GoldenCards = Charm(
     description="25% chance for Cards to spawn with GOLD modifier",
     effects=[
         Effect(
-            EffectType.GOLD_MODIFIER,
+            type=EffectType.GOLD_MODIFIER,
             amount=25,
             chance=25,
-            target=Card
-        )
-    ],
-    rarity="common"
-)
-
-GoldenCards = Charm(
-    name="Golden Cards",
-    description="25% chance for Cards to spawn with GOLD modifier",
-    effects=[
-        Effect(
-            EffectType.GOLD_MODIFIER,
-            amount=25,
-            chance=25,
-            target=Card
+            target=Card,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -125,21 +117,23 @@ GoldenCards = Charm(
 
 Altered_Coin = Charm(
     name="Altered Coin",
-    description="+1 spins_left, +3 luck (cooldown 1) 15% chance for destruction after the fifth use",
+    description="+1 spins_left, +3 luck (cooldown 1)",
     effects=[
         Effect(
-            EffectType.LUCK,
+            type=EffectType.LUCK,
             amount=3,
-            chance=100
+            chance=100,
+            trigger=Trigger.ON_SPIN_END
         ),
         Effect(
-            EffectType.SPINS_LEFT,
+            type=EffectType.SPINS_LEFT,
             amount=1,
-            chance=100
+            chance=100,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common",
-    cooldown=1
+    cooldown_rounds=1
 )
 
 Spoons = Charm(
@@ -231,7 +225,8 @@ LuckyPenny = Charm(
         Effect(
             EffectType.LUCK,
             amount=5,
-            chance=12
+            chance=12,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -244,7 +239,8 @@ FortuneCookie = Charm(
         Effect(
             EffectType.LUCK,
             amount=3,
-            chance=10
+            chance=10,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -257,12 +253,14 @@ JadeRabbit = Charm(
         Effect(
             EffectType.LUCK,
             amount=4,
-            chance=16
+            chance=16,
+            trigger=Trigger.ON_SPIN_END
         ),
         Effect(
             EffectType.SPINS_LEFT,
             amount=1,
-            chance=100
+            chance=100,
+            trigger=Trigger.ON_SPIN_END
         )
     ],
     rarity="common"
@@ -275,7 +273,8 @@ Cornerstone = Charm(
         Effect(
             EffectType.LUCK,
             amount=7,
-            chance=100
+            chance=100,
+            condition=FirstSpinAfterCharmBought()
         )
     ],
     rarity="common"
@@ -283,23 +282,29 @@ Cornerstone = Charm(
 
 NotGreedy = Charm(
     name="Not Greedy",
-    description="5% chance for any symbol to spawn with GOLD modifier. Raises by 3% for every round skipped when paying a deadline early",
+    description="5% base chance for any symbol to spawn with GOLD modifier. Raises by 3% for every round skipped this deadline",
     effects=[
         Effect(
-            EffectType.GOLD_MODIFIER,
+            type=EffectType.DYNAMIC_GOLD_CHANCE,
             amount=5,
-            chance=5
+            calculate_fn=lambda gs: 5 + (gs.get('rounds_skipped_this_deadline', 0) * 3)
         )
     ],
     rarity="common"
 )
 
 LuckyStar = Charm(
-"Lucky Star",
-"After scoring 1 pattern in 3 consecutive spins, next spin gains +5 luck",
-kind="luck",
-amount=5,
-rarity="common"
+    name="Lucky Star",
+    description="After scoring 1 pattern in 3 consecutive spins, next spin gains +5 luck",
+    effects=[
+        Effect(
+            EffectType.LUCK,
+            amount=5,
+            chance=100,
+            condition=NumPatternScored(3, 1)
+        )
+    ],
+    rarity="common"
 )
 
 Wishbone = Charm(
@@ -310,234 +315,409 @@ Wishbone = Charm(
             EffectType.LUCK,
             amount=2,
             chance=100
+        ),
+        Effect(
+            EffectType.LUCK,
+            amount=5,
+            chance=100,
+            condition=NoPatternSpins(1)
         )
     ],
     rarity="common"
 )
 
 Sunflower = Charm(
-"Sunflower",
-"Guarantee a Horizontal Line XL pattern if no pattern appears for 2 spins",
-kind="guaranteed_pattern",
-rarity="common"
+    name="Sunflower",
+    description="Guarantee a Horizontal Line XL pattern if no pattern appears for 2 spins",
+    effects=[
+        Effect(
+            type=EffectType.GUARANTEE_PATTERN,
+            target=HorizontalLineXL,
+            chance=100,
+            condition=NoPatternSpins(2)
+        )
+    ],
+    rarity="common"
 )
 
 CatWink = Charm(
-"Cat Wink",
-"Guarantee a Vertical Line pattern after 1 scoreless spins",
-kind="guaranteed_pattern",
-rarity="common"
+    name="Cat Wink",
+    description="Guarantee a Vertical Line pattern after 1 scoreless spin",
+    effects=[
+        Effect(
+            type=EffectType.GUARANTEE_PATTERN,
+            target=VerticalLine,
+            chance=100,
+            condition=NoPatternSpins(1)
+        )
+    ],
+    rarity="common"
 )
 
 Smile = Charm(
-"Smile",
-"+3 luck for next spin (cooldown 1)",
-kind="luck",
-amount=3,
-cooldown_rounds=1,
-rarity="common"
+    name="Smile",
+    description="+3 luck for next spin (cooldown 1)",
+    effects=[
+        Effect(
+            type=EffectType.LUCK,
+            amount=3,
+            chance=100
+        )
+    ],
+    rarity="common",
+    cooldown_rounds=1
 )
 
 FourLeaf = Charm(
-"Four Leaf",
-"+9 luck for next spin (5% trigger chance)",
-kind="luck",
-amount=9,
-chance=5,
-rarity="common"
+    name="Four Leaf",
+    description="+9 luck for next spin (5% trigger chance)",
+    effects=[
+        Effect(
+            type=EffectType.LUCK,
+            amount=9,
+            chance=5,
+            trigger=Trigger.ON_SPIN_END
+        )
+    ],
+    rarity="common"
 )
 
 OneMoreSpin = Charm(
-"One More Spin",
-"+1 max_spins next round (cooldown 3)",
-kind="extra_spin",
-cooldown_rounds=2,
-rarity="common"
+    name="One More Spin",
+    description="+1 max_spins next round (cooldown 3)",
+    effects=[
+        Effect(
+            type=EffectType.MAX_SPINS,
+            amount=1,
+            chance=100
+        )
+    ],
+    rarity="common",
+    cooldown_rounds=3
 )
 
 PocketRabbit = Charm(
-"Pocket Rabbit",
-"+1 luck for every charm bought this deadline, applied next spin",
-kind="luck",
-amount=1,
-rarity="common"
+    name="Pocket Rabbit",
+    description="+1 luck for every charm bought this deadline, applied next spin",
+    effects=[
+        Effect(
+            type=EffectType.LUCK,
+            amount=1,
+            chance=100,
+            trigger=Trigger.ON_SPIN_END,
+            calculate_fn=lambda gs: gs.get('charms_bought_this_deadline', 0)
+        )
+    ],
+    rarity="common"
 )
 
 BrokenMirror = Charm(
-"Broken Mirror",
-"If you fail to score, next spin gains +4 luck",
-kind="luck",
-amount=4,
-rarity="common"
+    name="Broken Mirror",
+    description="If you fail to score, next spin gains +4 luck",
+    effects=[
+        Effect(
+            type=EffectType.LUCK,
+            amount=4,
+            chance=100,
+            condition=NoPatternSpins(1)
+        )
+    ],
+    rarity="common"
 )
 
 # ============================================================
 # CHARM DEFINITIONS - UNCOMMON TIER (30% spawn rate base) (33% with upgrade)
 # ============================================================
 
-
 # Extra spin charm
 Spare_Change = Charm(
-"Spare Change",
-"+2 max spins",
-kind="max_spins+",
-rarity="uncommon"
+    name="Spare Change",
+    description="+2 max spins",
+    effects=[
+        Effect(
+            type=EffectType.MAX_SPINS,
+            amount=2,
+            chance=100
+        )
+    ],
+    rarity="uncommon"
 )
 
 # Weight-active charms (cooldown based)
 Struck_Gold = Charm(
-"Struck Gold",
-"+2 avg coin manifestation for the rest of the deadline",
-kind="weight_active",
-target=Coin,
-cooldown_rounds=3,
-rarity="uncommon"
+    name="Struck Gold",
+    description="+2 avg coin manifestation for the rest of the deadline",
+    effects=[
+        Effect(
+            type=EffectType.WEIGHT_ACTIVE,
+            target=Coin,
+            amount=2,
+            chance=100,
+            trigger=Trigger.ON_SPIN_END
+        )
+    ],
+    rarity="uncommon",
+    cooldown_rounds=3
 )
 
 Trick_Deck = Charm(
-"Trick Deck",
-"+2 avg card manifestation for the rest of the deadline",
-kind="weight_active",
-target=Card,
-cooldown_rounds=3,
-rarity="uncommon"
+    name="Trick Deck",
+    description="+2 avg card manifestation for the rest of the deadline",
+    effects=[
+        Effect(
+            type=EffectType.WEIGHT_ACTIVE,
+            target=Card,
+            amount=2,
+            chance=100,
+            trigger=Trigger.ON_SPIN_END
+        )
+    ],
+    rarity="uncommon",
+    cooldown_rounds=3
 )
 
 ILoveTops = Charm(
-"I Love Tops",
-"+2 avg spinner manifestation for the rest of the deadline",
-kind="weight_active",
-target=Spinner,
-cooldown_rounds=3,
-rarity="uncommon"
+    name="I Love Tops",
+    description="+2 avg spinner manifestation for the rest of the deadline",
+    effects=[
+        Effect(
+            type=EffectType.WEIGHT_ACTIVE,
+            target=Spinner,
+            amount=2,
+            chance=100,
+            trigger=Trigger.ON_SPIN_END
+        )
+    ],
+    rarity="uncommon",
+    cooldown_rounds=3
 )
 
 Dice_Hard = Charm(
-"Dice Hard",
-"+2 avg dice manifestation for the rest of the deadline",
-kind="weight_active",
-target=Dice,
-cooldown_rounds=3,
-rarity="uncommon"
+    name="Dice Hard",
+    description="+2 avg dice manifestation for the rest of the deadline",
+    effects=[
+        Effect(
+            type=EffectType.WEIGHT_ACTIVE,
+            target=Dice,
+            amount=2,
+            chance=100,
+            trigger=Trigger.ON_SPIN_END
+        )
+    ],
+    rarity="uncommon",
+    cooldown_rounds=3
 )
 
 WheelOfFortune = Charm(
-"Wheel of Fortune",
-"+2 avg wheel manifestation for the rest of the deadline",
-kind="weight_active",
-target=Wheel,
-cooldown_rounds=3,
-rarity="uncommon"
+    name="Wheel of Fortune",
+    description="+2 avg wheel manifestation for the rest of the deadline",
+    effects=[
+        Effect(
+            type=EffectType.WEIGHT_ACTIVE,
+            target=Wheel,
+            amount=2,
+            chance=100,
+            trigger=Trigger.ON_SPIN_END
+        )
+    ],
+    rarity="uncommon",
+    cooldown_rounds=3
 )
 
 SymbolBoost = Charm(
-"Symbol Boost",
-"Increase a chosen symbol's xmult by +1",
-kind="symbol_xmult",
-amount=1,
-rarity="uncommon"
+    name="Symbol Boost",
+    description="Increase a chosen symbol's xmult by +1",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_SYMBOL_MULT,
+            amount=1,
+            chance=100,
+            trigger=Trigger.WHEN_BOUGHT
+        )
+    ],
+    rarity="uncommon"
 )
 
 SymbolSurge = Charm(
-"Symbol Surge",
-"Increase a chosen symbol's xmult by +2",
-kind="symbol_xmult",
-amount=2,
-rarity="uncommon"
+    name="Symbol Surge",
+    description="Increase a chosen symbol's xmult by +2",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_SYMBOL_MULT,
+            amount=2,
+            chance=100,
+            trigger=Trigger.WHEN_BOUGHT
+        )
+    ],
+    rarity="uncommon"
 )
 
 CharmPocket = Charm(
-"Charm Pocket",
-"+1 charm space (doesn't take space)",
-kind="charm_space",
-amount=1,
-rarity="uncommon"
+    name="Charm Pocket",
+    description="+1 charm space (doesn't take space)",
+    effects=[
+        Effect(
+            type=EffectType.ADD_CHARM_SPACE,
+            amount=1,
+            chance=100
+        )
+    ],
+    rarity="uncommon"
 )
 
 CharmHouse = Charm(
-"Charm House",
-"+2 charm space",
-kind="charm_space",
-amount=2,
-rarity="uncommon"
+    name="Charm House",
+    description="+2 charm space",
+    effects=[
+        Effect(
+            type=EffectType.ADD_CHARM_SPACE,
+            amount=2,
+            chance=100
+        )
+    ],
+    rarity="uncommon"
 )
 
 Blueprint = Charm(
-"Blueprint",
-"Gain the same effect as the last bought charm",
-kind="copy_purchased",
-rarity="uncommon"
+    name="Blueprint",
+    description="Gain the same effect as the last bought charm",
+    effects=[
+        Effect(
+            type=EffectType.COPY_LAST_NON_BLUEPRINT_CHARM,
+            chance=100,
+            trigger=Trigger.WHEN_BOUGHT
+        )
+    ],
+    rarity="uncommon"
 )
 
 LeftWing = Charm(
-"Left Wing",
-"Reuse the effect of the first charm you sold",
-kind="copy_sold",
-rarity="uncommon"
+    name="Left Wing",
+    description="Reuse the effect of the first charm you sold",
+    effects=[
+        Effect(
+            type=EffectType.COPY_FIRST_SOLD_CHARM,
+            chance=100,
+            trigger=Trigger.WHEN_BOUGHT
+        )
+    ],
+    rarity="uncommon"
 )
 
 PhoneReuse = Charm(
-"Phone Reuse",
-"When a phone ability is selected, stop it from reappearing. When this charm is thrown away, allow it to be reseen and reuse the phone ability",
-kind="phone_reuse",
-rarity="uncommon"
+    name="Phone Reuse",
+    description="When a phone ability is selected, stop it from reappearing. When this charm is thrown away, allow it to be reseen and reuse the phone ability",
+    effects=[
+        Effect(
+            type=EffectType.PHONE_STORAGE,
+            chance=100,
+            trigger=Trigger.ON_THROWN_AWAY
+        )
+    ],
+    rarity="uncommon"
 )
 
 CharmReappear = Charm(
-"Charm Reappear",
-"When a charm is thrown away, store it inside this charm. When this charm is thrown away, respawn the thrown away charm on the table",
-kind="charm_reappear",
-rarity="uncommon"
+    name="Charm Reappear",
+    description="When a charm is thrown away, store it inside this charm. When this charm is thrown away, respawn the thrown away charm on the table",
+    effects=[
+        Effect(
+            type=EffectType.CHARM_STORAGE,
+            chance=100,
+            trigger=Trigger.ON_THROWN_AWAY
+        )
+    ],
+    rarity="uncommon"
 )
 
 TakeSpace = Charm(
-"Take Space",
-"When a charm that doesn’t take space is bought, store it inside this charm. Throwing away this charm reuses the charm in question immediately",
-kind="take_space",
-rarity="uncommon"
+    name="Take Space",
+    description="When a charm that doesn’t take space is bought, store it inside this charm. Throwing away this charm reuses the charm in question immediately",
+    effects=[
+        Effect(
+            type=EffectType.CHARM_STORAGE_NON_TAKE_SPACE,
+            chance=100,
+            trigger=Trigger.ON_THROWN_AWAY
+        )
+    ],
+    rarity="uncommon"
 )
 
 I_cant_stop_winning = Charm(
-"I can't stop winning",
-"13% chance for Wheel and Card to have the chain modifier (chain modifier increases the pattern scored's value by its base value)",
-kind="chain_modifier",
-target=(Wheel, Card),
-amount=13,
-rarity="uncommon"
+    name="I can't stop winning",
+    description="13% chance for Wheel and Card to have the chain modifier",
+    effects=[
+        Effect(
+            type=EffectType.ADD_CHAIN,
+            target=(Wheel, Card),
+            amount=1,
+            chance=13,
+            trigger=Trigger.PERMANENT
+        )
+    ],
+    rarity="uncommon"
 )
 
 ReRetrigger = Charm(
-"Re-Retrigger",
-"5% chance for Dice to have the recharge modifier (recharge gives +1 charge on a random cooldown charm)",
-kind="recharge_modifier",
-target=Dice,
-amount=5,
-rarity="uncommon"
+    name="Re-Retrigger",
+    description="5% chance for Dice to have the recharge modifier",
+    effects=[
+        Effect(
+            type=EffectType.ADD_RECHARGE_TARGET,
+            target=Dice,
+            amount=1,
+            chance=5,
+            trigger=Trigger.PERMANENT
+        )
+    ],
+    rarity="uncommon"
 )
 
 AGAINAGAINAGAIN = Charm(
-"AGAINAGAINAGAIN",
-"15% chance for Coin and Spinner to have the repetition modifier (gives +1 trigger of the pattern with the modifier scored) and does it multiple times every time there is one in a pattern",
-kind="repetition_modifier",
-target=(Coin, Spinner),
-amount=15,
-rarity="uncommon"
+    name="AGAINAGAINAGAIN",
+    description="15% chance for Coin and Spinner to have the repetition modifier",
+    effects=[
+        Effect(
+            type=EffectType.ADD_REPETITION,
+            target=(Coin, Spinner),
+            amount=1,
+            chance=15,
+            trigger=Trigger.PERMANENT
+        )
+    ],
+    rarity="uncommon"
 )
 
 LuckyReroll = Charm(
-"Lucky Reroll",
-"+1 max spins and +3 luck for first spin of next round",
-kind="max_spins+",
-amount=1,
-rarity="uncommon"
+    name="Lucky Reroll",
+    description="+1 max spins and +3 luck for first spin of next round",
+    effects=[
+        Effect(
+            type=EffectType.MAX_SPINS,
+            amount=1,
+            chance=100
+        ),
+        Effect(
+            type=EffectType.LUCK,
+            amount=3,
+            chance=100
+        )
+    ],
+    rarity="uncommon"
 )
 
 SymbolBlast = Charm(
-"Symbol Blast",
-"Increase a chosen symbol's xmult by +3",
-kind="symbol_xmult",
-amount=3,
-rarity="uncommon"
+    name="Symbol Blast",
+    description="Increase a chosen symbol's xmult by +3",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_SYMBOL_MULT,
+            amount=3,
+            chance=100,
+            trigger=Trigger.WHEN_BOUGHT
+        )
+    ],
+    rarity="uncommon"
 )
 
 # ============================================================
@@ -545,139 +725,259 @@ rarity="uncommon"
 # ============================================================
 
 ImBadAtMath = Charm(
-"I'm Bad At Math",
-"35% chance to trigger patterns one more time",
-kind="retrigger",
-rarity="rare"
+name="I'm Bad At Math",
+    description="35% chance to trigger patterns one more time",
+    effects=[
+        Effect(
+            type=EffectType.RETRIGGER_PATTERN,
+            chance=35
+        )
+    ],
+    rarity="rare"
 )
 
 Ramen = Charm(
-"Ramen",
-"Whenever you score 5 patterns, double the value of all symbols until the end of the round",
-kind="value_doubling",
-rarity="rare"
+    name="Ramen",
+    description="Whenever you score 5 patterns, double the value of all symbols until the end of the round",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_DOUBLING,
+            chance=100,
+            condition=NumPatternScored(1, 5)
+        )
+    ],
+    rarity="rare"
 )
 
 BeefBrisket = Charm(
-"Beef Brisket",
-"Whenever you score no patterns in a round, double all symbol mults, pattern mults, and 1.5 * earnings mult",
-kind="value_boost_on_drought",
-rarity="rare"
+    name="Beef Brisket",
+    description="Whenever you score no patterns in a round, double all symbol mults, pattern mults, and 1.5 * earnings mult",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_BOOST_DROUGHT,
+            chance=100,
+            condition=ScorelessRound(),
+            trigger=Trigger.ON_ROUND_END
+        )
+    ],
+    rarity="rare"
 )
 
 FreeEarnings = Charm(
-"Free Earnings",
-"Earnings mult +1 permanently (doesn't take space)",
-kind="earnings_mult",
-rarity="rare"
+    name="Free Earnings",
+    description="Earnings mult +1 permanently (doesn't take space)",
+    effects=[
+        Effect(
+            type=EffectType.EARNINGS_MULT,
+            amount=1,
+            chance=100
+        )
+    ],
+    rarity="rare"
 )
 
 Bell = Charm(
-"Bell",
-"Symbols mult +1 permanently (cooldown 2)",
-kind="symbols_mult",
-cooldown_rounds=2,
-rarity="rare"
+    name="Bell",
+    description="Symbols mult +1 permanently (cooldown 2)",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_SYMBOL_MULT,
+            amount=1,
+            chance=100
+        )
+    ],
+    rarity="rare",
+    cooldown=2
 )
 
 EverythingInExcess = Charm(
-"Everything in Excess",
-"Patterns mult +1 permanently for every time you earn 1.5x the required deadline's amount",
-kind="patterns_mult",
-rarity="rare"
+    name="Everything in Excess",
+    description="Patterns mult +1 permanently for every time you earn 1.5x the required deadline's amount",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_PATTERNS_MULT,
+            amount=1,
+            chance=100,
+            condition=EarningsThreshold(1.5)
+        )
+    ],
+    rarity="rare"
 )
 
 NO_CHANGE = Charm(
-"NOCHANGE",
-"Patterns containing symbols other than Coin trigger one more time (cooldown 4)",
-kind="pattern_retrigger_non_coin",
-cooldown_rounds=4,
-rarity="rare"
+    name="NO CHANGE",
+    description="Patterns containing symbols other than Coin trigger one more time (cooldown 4)",
+    effects=[
+        Effect(
+            type=EffectType.RETRIGGER_PATTERN,
+            target=lambda pattern: not all(symbol == Coin for symbol in pattern.symbols),
+            chance=100
+        )
+    ],
+    rarity="rare",
+    cooldown=4
 )
 
 CoinExtraTrigger = Charm(
-"Coin Rush",
-"Patterns containing only Coins trigger two more times (cooldown 5)",
-kind="pattern_retrigger_coin",
-cooldown_rounds=5,
-rarity="rare"
+    name="Coin Rush",
+    description="Patterns containing only Coins trigger two more times (cooldown 5)",
+    effects=[
+        Effect(
+            type=EffectType.RETRIGGER_PATTERN(2),
+            target=lambda pattern: all(symbol == Coin for symbol in pattern.symbols),
+            chance=100
+        )
+    ],
+    rarity="rare",
+    cooldown=5
 )
 
 PatternPulse = Charm(
-"Pattern Pulse",
-"70% chance to trigger patterns one more time for the rest of the spin when there are 10 pattern triggers in a spin",
-kind="retrigger",
-rarity="rare"
+    name="Pattern Pulse",
+    description="70% chance to trigger patterns one more time for the rest of the spin when there are 10 pattern triggers in a spin",
+    effects=[
+        Effect(
+            type=EffectType.RETRIGGER_PATTERN,
+            chance=70
+            condition=NumPatternScored(10)
+        )
+    ],
+    rarity="rare"
 )
 
 BigScore = Charm(
-"Big Score",
-"Whenever you score at least 8 patterns, triple all symbol values for the rest of the round",
-kind="value_doubling",
-rarity="rare"
+    name="Big Score",
+    description="Whenever you score at least 8 patterns, triple all symbol values for the rest of the round",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_DOUBLING,
+            chance=100,
+            condition=NumPatternScored(8)
+        )
+    ],
+    rarity="rare"
 )
 
 DrySpellBoost = Charm(
-"Dry Spell",
-"Whenever you score no patterns in a round, increase all symbol and pattern values by 90% permanently",
-kind="value_boost_on_drought",
-rarity="rare"
+    name="Dry Spell",
+    description="Whenever you score no patterns in a round, increase all symbol and pattern values by 200% permanently",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_BOOST_DROUGHT,
+            chance=100,
+            condition=ScorelessRound()
+        )
+    ],
+    rarity="rare"
 )
 
 PatternSurge = Charm(
-"Pattern Surge",
-"Patterns mult +2 permanently after scoring 10 patterns in a round",
-kind="patterns_mult",
-rarity="rare"
+name="Pattern Surge",
+    description="Patterns mult +2 permanently after scoring 10 patterns in a round",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_PATTERNS_MULT,
+            amount=2,
+            chance=100,
+            condition=NumPatternScored(10)
+        )
+    ],
+    rarity="rare"
 )
 
 LuckyCoinMath = Charm(
-"Lucky Coin Math",
-"30% chance to trigger patterns one more time when a pattern contains a Coin",
-kind="retrigger",
-rarity="rare"
+    name="Lucky Coin Math",
+    description="30% chance to trigger patterns one more time when a pattern contains a Coin",
+    effects=[
+        Effect(
+            type=EffectType.RETRIGGER_PATTERN,
+            chance=30,
+            condition=lambda pattern: any(symbol == Coin for symbol in pattern.symbols)
+        )
+    ],
+    rarity="rare"
 )
 
 SymbolFrenzy = Charm(
-"Symbol Frenzy",
-"Symbols mult +2 permanently after scoring 5 jackpots in a round",
-kind="symbols_mult",
-rarity="rare"
+    name="Symbol Frenzy",
+    description="Symbols mult +2 permanently after scoring 5 jackpots in a round",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_SYMBOLS_MULT,
+            amount=2,
+            chance=100,
+            condition=JackpotScored(5)
+        )
+    ],
+    rarity="rare"
 )
 
 PatternWave = Charm(
-"Pattern Wave",
-"Patterns mult +2 permanently after scoring 7 patterns in one spin",
-kind="patterns_mult",
-rarity="rare"
+    name="Pattern Wave",
+    description="Patterns mult +2 permanently after scoring 7 patterns in one spin",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_PATTERNS_MULT,
+            amount=2,
+            chance=100,
+            condition=NumPatternScored(7)
+        )
+    ],
+    rarity="rare"
 )
 
 EarningsRush = Charm(
-"Earnings Rush",
-"Earnings mult +3 permanently (doesn't take space)",
-kind="earnings_mult",
-rarity="rare"
+    name="Earnings Rush",
+    description="Earnings mult +3 permanently (doesn't take space)",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_EARNINGS_MULT,
+            amount=3,
+            chance=100
+        )
+    ],
+    rarity="rare"
 )
 
 SymbolRitual = Charm(
-"Symbol Ritual",
-"Symbols mult +3 permanently after scoring 5+ different patterns in one spin",
-kind="symbols_mult",
-rarity="rare"
+    name="Symbol Ritual",
+    description="Symbols mult +3 permanently after scoring 5+ different patterns in one spin",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_SYMBOLS_MULT,
+            amount=3,
+            chance=100,
+            condition=UniquePatternCount(5)
+        )
+    ],
+    rarity="rare"
 )
 
 PatternChain = Charm(
-"Pattern Chain",
-"Patterns mult +1 permanently every time you score 5 patterns after a scoreless spin",
-kind="patterns_mult",
-rarity="rare"
+    name="Pattern Chain",
+    description="Patterns mult +1 permanently every time you score 5 patterns after a scoreless spin",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_PATTERNS_MULT,
+            amount=1,
+            chance=100,
+            condition=ScorelessSpinFollowup(5)
+        )
+    ],
+    rarity="rare"
 )
 
 DoubleCoinValues = Charm(
-"Double Coin Values",
-"Double all Coin values for the rest of the round after scoring 5 Coin patterns",
-kind="value_doubling",
-rarity="rare"
+    name="Double Coin Values",
+    description="Double all Coin values for the rest of the round after scoring 5 Coin patterns",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_DOUBLING,
+            chance=100,
+            condition=NumPatternScored(5) if pattern.symbols == [Coin] * 5 else None
+        )
+    ],
+    rarity="rare"
 )
 
 DoubleDiceValues = Charm(

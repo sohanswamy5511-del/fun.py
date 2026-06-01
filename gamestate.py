@@ -11,9 +11,12 @@ game_state = {
     'patterns_mult': 1,
 
     # Runtime combat-style effects
-    'repetition_targets': [],
-    'chain_targets': [],
-    'recharge_targets': [],
+    'repetition_targets': {},
+    "repetition_counts": {},
+    'chain_targets': {},
+    "chain_counts": {},
+    'recharge_targets': {},
+    "recharge_counts": {},
 
     # Misc
     'pending_luck': 0,

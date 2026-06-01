@@ -11,7 +11,7 @@ class Symbol:
       - base_value
       - current_value
       - display_name
-      - is_golden (modifier flag)
+      - has_modifier (modifier flag)
     """
 
     weight = 1  # default weight if not overridden
