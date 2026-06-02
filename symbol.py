@@ -44,6 +44,17 @@ class Symbol:
         base = self.current_value if self.current_value is not None else self.base_value
         self.current_value = base * mult
 
+    def get_mult_display(self):
+        """
+        Extract and return just the multiplier portion from display_name.
+        For board printing purposes.
+        """
+        import re
+        match = re.search(r'\(([^)]+)\)', self.display_name)
+        if match:
+            return match.group(1)
+        return self.display_name
+
     def activate(self):
         """
         Each subclass overrides this to roll/spin/draw.
@@ -60,6 +71,7 @@ class Coin(Symbol):
 
     def __init__(self):
         super().__init__("Coin", base_value=3)
+        self.display_name = "Coin (?)"
 
     def activate(self):
         """
@@ -104,6 +116,7 @@ class Dice(Symbol):
     def __init__(self):
         super().__init__("Dice", base_value=5)
         self.sidemult = None
+        self.display_name = "Dice (?)"
 
     def activate(self):
         """
@@ -124,6 +137,7 @@ class Card(Symbol):
 
     def __init__(self):
         super().__init__("Card", base_value=3)
+        self.display_name = "Card (?)"
 
     def activate(self):
         """
@@ -144,6 +158,7 @@ class Wheel(Symbol):
 
     def __init__(self):
         super().__init__("Wheel", base_value=5)
+        self.display_name = "Wheel (?)"
 
     def activate(self):
         """
@@ -156,21 +171,8 @@ class Wheel(Symbol):
 
 
 # ============================================================
-# SEVEN (for 777)
-# ============================================================
-
-class Seven(Symbol):
-    weight = 0
-
-    def __init__(self):
-        super().__init__("Seven", base_value=None)
-
-    def activate(self):
-        pass
-
-
 # ============================================================
 # LIST OF ALL SYMBOL TYPES
 # ============================================================
 
-BASE_SYMBOL_CLASSES = [Dice, Coin, Spinner, Card, Wheel, Seven]
+BASE_SYMBOL_CLASSES = [Dice, Coin, Spinner, Card, Wheel]

@@ -1,5 +1,4 @@
-import random
-
+from resolver import CharmResolver
 # ============================================================
 # EVENT TYPES
 # ============================================================
@@ -35,28 +34,6 @@ class EventBus:
 
         for handler in self.handlers[event_type]:
             handler(event, game_state, context)
-
-
-# ============================================================
-# RESOLVER
-# ============================================================
-
-class CharmResolver:
-
-    def resolve(self, charm):
-
-        events = []
-
-        for effect in charm.effects:
-
-            if effect.chance is not None:
-                if random.randint(1, 100) > effect.chance:
-                    continue
-
-            events.append(effect)
-
-        return events
-
 
 # ============================================================
 # EVENT HANDLERS

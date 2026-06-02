@@ -2,7 +2,7 @@ from os import name
 
 from charms import Charm
 from effects import Effect, EffectType, Trigger
-from symbol import Coin, Spinner, Wheel, Dice, Card, Seven
+from symbol import Coin, Spinner, Wheel, Dice, Card
 from conditions import FirstSpinAfterCharmBought, NoLargePatternSpins, NoPatternSpins, NumPatternScored, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup
 from pattern import Pattern, VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SPOON_PATTERNS, N_PATTERNS, X_PATTERNS, Jackpot
 # ============================================================
@@ -838,7 +838,7 @@ PatternPulse = Charm(
     effects=[
         Effect(
             type=EffectType.RETRIGGER_PATTERN,
-            chance=70
+            chance=70,
             condition=NumPatternScored(10)
         )
     ],
@@ -1488,13 +1488,6 @@ amount=5,
 rarity="exotic"
 )
 
-SevenDeadlySins = Charm(
-"7 Deadly Sins",
-"5% chance to get three 7s on board (1,1)(1,2)(1,3). Reward ^^2 coins earned this round",
-kind="three7s",
-rarity="exotic"
-)
-
 InfiniteStorage = Charm(
 "Infinite Storage",
 "+1 charm space for every 5+ jackpots in spin, +1 for each jackpot after 10th",
@@ -1531,7 +1524,7 @@ rarity="exotic_craftable",
 
 THEWORLDENDER = Charm(
 "THE WORLD ENDER",
-"20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x, 777 gain [x^2]x. X increases by 1 per 5 jackpots. Spawn 777 next spin. +1 charm space permanently",
+"20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x. x increases by 1 per 5 jackpots. +1 charm space permanently",
 kind="world_ender",
 cooldown_rounds=3,
 rarity="transcendent"
@@ -1585,12 +1578,7 @@ CRAFTABLE_CHARMS = {
     "requires": ["Soul", "Body", "Blood"],
     "rarity": "craftable_exotic"
 },
-"777": {
-    "name": "777 Upgrade",
-    "description": "Button triggers give 100% chance for 777. 777 value +^^0.01 per jackpot",
-    "requires": ["7 Deadly Sins", "Giant Peach", "The Largest Tomato Ever"],
-    "rarity": "craftable_exotic"
-},
+
 "Sohan Swamy": {
     "name": "Sohan Swamy",
     "description": "+1 value on all symbols",
@@ -1623,7 +1611,7 @@ CRAFTABLE_CHARMS = {
 },
 "THE WORLD ENDER": {
     "name": "THE WORLD ENDER",
-    "description": "20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x, 777 gain [x^2]x. X increases by 1 per 5 jackpots. Spawn 777 next spin. +1 charm space permanently",
+    "description": "20% symbol modifier chance (apply 2x). All xmults treated as x1. +4 luck. Activate: all values gain [x]x. x increases by 1 every 5 jackpots. +1 charm space permanently",
     "requires": ["Sohan Swamy", "EssenceOfGods x 3"],
     "rarity": "craftable_transcendent"
 }
@@ -1687,7 +1675,7 @@ SymbolFusion, PatternFusion, Mimic,
 QuantProfessor, IsThisBroken, TenXMult,
 CoinTailsBoost, ExponentialMult, ExponentialGrowth,
 AlwaysOn, TheSeraphim, Blood, Soul, Body,
-SevenDeadlySins, InfiniteStorage, RELOADING, Polynomial,
+InfiniteStorage, RELOADING, Polynomial,
 
 # Transcendency
 THEWORLDENDER, EssenceOfGods,

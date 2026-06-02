@@ -135,10 +135,7 @@ class ScoreEngine:
             f"{pattern.name} -> {total}"
         )
 
-        board.print_board(
-            highlight_cells=cells,
-            pattern_score=total
-        )
+        board.add_highlight(cells)
 
         return total
 

@@ -20,5 +20,7 @@ game_state = {
 
     # Misc
     'pending_luck': 0,
-    'spins_left': 0
+    'spins_left': 0,
+    'balance': 0,
+    'total_winnings': 0
 }
