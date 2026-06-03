@@ -147,16 +147,26 @@ class HorizontalLineXL(Pattern):
 # SPOON PATTERN (A = relative, B = absolute)
 # ============================================================
 
-class Spoon(Pattern):
+class SpoonA(Pattern):
     def __init__(self):
         super().__init__(
-            "Spoon",
+            "Spoon A",
             formations=[
                 # Spoon A (relative)
                 [(0, 0), (1, 0), (2, 0),
                  (0, 1), (1, 1), (2, 1),
                  (1, 2), (1, 3), (1, 4)],
+            ],
+            base_multiplier_value=5,
+            absolute=False
+        )
 
+
+class SpoonB(Pattern):
+    def __init__(self):
+        super().__init__(
+            "Spoon B",
+            formations=[
                 # Spoon B (absolute)
                 [(1, 0), (1, 1), (1, 2),
                  (1, 3), (1, 4),
@@ -164,69 +174,8 @@ class Spoon(Pattern):
                  (0, 3), (0, 4)]
             ],
             base_multiplier_value=5,
-            absolute=False  # Spoon A is relative; Spoon B handled manually
+            absolute=True
         )
-
-    def matches(self, board):
-        """
-        Custom override:
-          - Formation 0 = relative (Spoon A)
-          - Formation 1 = absolute (Spoon B)
-        """
-        rows = len(board)
-        cols = len(board[0])
-        found = []
-
-        # ----------------------------
-        # Spoon A (relative)
-        # ----------------------------
-        formationA = self.formations[0]
-
-        for start_x in range(rows):
-            for start_y in range(cols):
-
-                anchor_symbol = board[start_x][start_y].name
-                match = True
-                cells = set()
-
-                for dx, dy in formationA:
-                    x = start_x + dx
-                    y = start_y + dy
-
-                    if not (0 <= x < rows and 0 <= y < cols):
-                        match = False
-                        break
-
-                    if board[x][y].name != anchor_symbol:
-                        match = False
-                        break
-
-                    cells.add((x, y))
-
-                if match:
-                    found.append(cells)
-
-        # ----------------------------
-        # Spoon B (absolute)
-        # ----------------------------
-        formationB = self.formations[1]
-        anchor_symbol = board[formationB[0][0]][formationB[0][1]].name
-        match = True
-        cells = set()
-
-        for (x, y) in formationB:
-            if not (0 <= x < rows and 0 <= y < cols):
-                match = False
-                break
-            if board[x][y].name != anchor_symbol:
-                match = False
-                break
-            cells.add((x, y))
-
-        if match:
-            found.append(cells)
-
-        return found
 
 class XPattern(Pattern):
     def __init__(self):
@@ -290,7 +239,8 @@ PATTERNS = [
     DiagonalLine(),
     HorizontalLineLarge(),
     HorizontalLineXL(),
-    Spoon(),
+    SpoonA(),
+    SpoonB(),
     NPatternA(),
     NPatternB(),
     XPattern(),

@@ -1,10 +1,11 @@
 from os import name
+import random
 
 from charms import Charm
 from effects import Effect, EffectType, Trigger
 from symbol import Coin, Spinner, Wheel, Dice, Card
 from conditions import FirstSpinAfterCharmBought, NoLargePatternSpins, NoPatternSpins, NumPatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount
-from pattern import Pattern, VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SPOON_PATTERNS, N_PATTERNS, X_PATTERNS, Jackpot
+from pattern import Pattern, VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SpoonA, SpoonB, NPatternA, NPatternB, XPattern, Jackpot
 # ============================================================
 # CHARM DEFINITIONS - COMMON TIER (50% spawn rate base) (30% with upgrade)
 # ============================================================
@@ -153,9 +154,9 @@ Spoons = Charm(
 
             type=EffectType.GUARANTEE_PATTERN,
 
-            target=SPOON_PATTERNS,
+            target=random.choice([SpoonA, SpoonB]),
 
-            trigger=Trigger.ON_SPIN_END,
+            trigger=Trigger.ON_SPIN,
 
             condition=NoLargePatternSpins(3)
         )
@@ -180,9 +181,9 @@ X = Charm(
 
             type=EffectType.GUARANTEE_PATTERN,
 
-            target=X_PATTERNS,
+            target=XPattern,
 
-            trigger=Trigger.ON_SPIN_END,
+            trigger=Trigger.ON_SPIN,
 
             condition=NoPatternSpins(5)
         )
@@ -207,7 +208,7 @@ N = Charm(
 
             type=EffectType.GUARANTEE_PATTERN,
 
-            target=N_PATTERNS,
+            target=random.choice([NPatternA, NPatternB]),
 
             trigger=Trigger.ON_SPIN_END,
 
