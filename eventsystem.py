@@ -132,7 +132,6 @@ def activate_charms(owned_charms, game_state, resolver, event_bus):
     ]
 
     if not available:
-        print("No cooldown charms available.")
         return
 
     print("\n🎯 Activating ALL available charms...\n")

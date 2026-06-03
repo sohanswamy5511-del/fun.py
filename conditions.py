@@ -59,15 +59,15 @@ class NoPatternSpins(Condition):
 
 class NumPatternScored(Condition):
     """
-    Checks if X patterns have been scored 
-    in N consecutive spins.
+    Checks if in N consecutive spins or across Z spins at least M patterns were scored in each
     
     Used by: LuckyStar charm (3 consecutive spins with 1 patterns)
     """
 
-    def __init__(self, consecutive_spins, patterns_required):
-        self.consecutive_spins = consecutive_spins
+    def __init__(self, patterns_required, consecutive_spins, across_spins_number):
         self.patterns_required = patterns_required
+        self.consecutive_spins = consecutive_spins
+        self.across_spins = across_spins_number
 
     def check(self, game_state):
         consecutive_scored = game_state.get(
@@ -206,3 +206,32 @@ class ScorelessSpinFollowup(Condition):
         last_spin_scoreless = game_state.get('last_spin_scoreless', False)
         patterns_this_spin = game_state.get('patterns_scored_this_spin', 0)
         return last_spin_scoreless and patterns_this_spin >= self.pattern_count
+
+class UniqueSymbolCount(Condition):
+    """
+    Checks if patterns containing N unique symbol types were scored.
+    
+    Used by: SymbolEcho (3+ different symbols in scored patterns)
+    """
+
+    def __init__(self, count):
+        self.count = count
+
+    def check(self, game_state):
+        unique_symbols = game_state.get('unique_symbols_this_spin', set())
+        return len(unique_symbols) >= self.count
+
+class SameSymbolCount(Condition):
+    """
+    Checks if patterns containing N of the same symbol type were scored.
+    
+    Used by: SymbolRally (6+ of the same symbol in scored patterns)
+    """
+
+    def __init__(self, count, time_requirement=None):
+        self.count = count
+        self.time_requirement = time_requirement
+
+    def check(self, game_state):
+        symbol_counts = game_state.get('symbol_counts_this_spin', {})
+        return any(count >= self.count for count in symbol_counts.values())

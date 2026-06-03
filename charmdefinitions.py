@@ -3,7 +3,7 @@ from os import name
 from charms import Charm
 from effects import Effect, EffectType, Trigger
 from symbol import Coin, Spinner, Wheel, Dice, Card
-from conditions import FirstSpinAfterCharmBought, NoLargePatternSpins, NoPatternSpins, NumPatternScored, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup
+from conditions import FirstSpinAfterCharmBought, NoLargePatternSpins, NoPatternSpins, NumPatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount
 from pattern import Pattern, VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SPOON_PATTERNS, N_PATTERNS, X_PATTERNS, Jackpot
 # ============================================================
 # CHARM DEFINITIONS - COMMON TIER (50% spawn rate base) (30% with upgrade)
@@ -969,92 +969,163 @@ PatternChain = Charm(
 
 DoubleCoinValues = Charm(
     name="Double Coin Values",
-    description="Double all Coin values for the rest of the round after scoring 5 Coin patterns",
+    description="Double all Coin values for the rest of the round after scoring 2 Coin patterns",
     effects=[
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(5) if Pattern.symbols == [Coin] * 5 else None
+            condition=NumPatternScored(2) if all(symbol == Coin for symbol in Pattern.symbols) else None
         )
     ],
     rarity="rare"
 )
 
 DoubleDiceValues = Charm(
-"Double Dice Values",
-"Double all Dice values for the rest of the round after scoring 5 Dice patterns",
-kind="value_doubling",
-rarity="rare"
+    name="Double Dice Values",
+    description="Double all Dice values for the rest of the round after scoring 2 Dice patterns",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_DOUBLING,
+            chance=100,
+            condition=NumPatternScored(2) if all(symbol == Dice for symbol in Pattern.symbols) else None
+        )
+    ],
+    rarity="rare"
 )
 
 DoubleSpinnerValues = Charm(
-"Double Spinner Values",
-"Double all Spinner values for the rest of the round after scoring 5 Spinner patterns",
-kind="value_doubling",
-rarity="rare"
+    name="Double Spinner Values",
+    description="Double all Spinner values for the rest of the round after scoring 2 Spinner patterns",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_DOUBLING,
+            chance=100,
+            condition=NumPatternScored(2) if all(symbol == Spinner for symbol in Pattern.symbols) else None
+        )
+    ],
+    rarity="rare"
 )
 
 DoubleCardValues = Charm(
-"Double Card Values",
-"Double all Card values for the rest of the round after scoring 5 Card patterns",
-kind="value_doubling",
-rarity="rare"
+    name="Double Card Values",
+    description="Double all Card values for the rest of the round after scoring 2 Card patterns",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_DOUBLING,
+            chance=100,
+            condition=NumPatternScored(2) if all(symbol == Card for symbol in Pattern.symbols) else None
+        )
+    ],
+    rarity="rare"
 )
 
 DoubleWheelValues = Charm(
-"Double Wheel Values",
-"Double all Wheel values for the rest of the round after scoring 5 Wheel patterns",
-kind="value_doubling",
-rarity="rare"
+    name="Double Wheel Values",
+    description="Double all Wheel values for the rest of the round after scoring 2 Wheel patterns",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_DOUBLING,
+            chance=100,
+            condition=NumPatternScored(2) if all(symbol == Wheel for symbol in Pattern.symbols) else None
+        )
+    ],
+    rarity="rare"
 )
 
 DoubleAllPatterns = Charm(
-"Double All Patterns",
-"Double all pattern values for the rest of the round after scoring 7+ patterns in one spin",
-kind="value_doubling",
-rarity="rare"
+    name="Double All Patterns",
+    description="Double all pattern values for the rest of the round after scoring 7+ patterns in one spin",
+    effects=[
+        Effect(
+            type=EffectType.VALUE_DOUBLING,
+            chance=100,
+            condition=NumPatternScored(7)
+        )
+    ],
+    rarity="rare"
 )
 
 EarningsWave = Charm(
-"Earnings Wave",
-"Double earnings mult for the rest of the round after scoring 18+ patterns in one spin",
-kind="earnings_mult",
-rarity="rare"
+    name="Earnings Wave",
+    description="Double earnings mult for the rest of the round after scoring 18+ patterns in one spin",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_EARNINGS_MULT,
+            chance=100,
+            condition=NumPatternScored(18)
+        )
+    ],
+    rarity="rare"
 )
 
 SymbolEcho = Charm(
-"Symbol Echo",
-"Symbols mult +1 permanently after scoring 3 different symbol patterns in one spin",
-kind="symbols_mult",
-rarity="rare"
+    name="Symbol Echo",
+    description="Symbols mult +1 permanently after scoring 3 different symbol patterns in one spin",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_SYMBOLS_MULT,
+            amount=1,
+            chance=100,
+            condition=UniqueSymbolCount(3)
+        )
+    ],
+    rarity="rare"
 )
 
 PatternEcho = Charm(
-"Pattern Echo",
-"Patterns mult +1 permanently after scoring 5 different patterns in one spin",
-kind="patterns_mult",
-rarity="rare"
+name="Pattern Echo",
+    description="Patterns mult +1 permanently after scoring 5 different patterns in one spin",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_PATTERNS_MULT,
+            amount=1,
+            chance=100,
+            condition=UniquePatternCount(5)
+        )
+    ],
+    rarity="rare"
 )
 
 EarningsEcho = Charm(
-"Earnings Echo",
-"Earnings mult +1 permanently after scoring 4 consecutive spins with no patterns",
-kind="earnings_mult",
-rarity="rare"
+    name="Earnings Echo",
+    description="Earnings mult +1 permanently after scoring 4 consecutive spins with no patterns",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_EARNINGS_MULT,
+            amount=1,
+            chance=100,
+            condition=NoPatternSpins(4)
+        )
+    ],
+    rarity="rare"
 )
 
 SymbolRally = Charm(
-"Symbol Rally",
-"Symbols mult +1 permanently after scoring 6+ same_symbol patterns in one deadline",
-kind="symbols_mult",
-rarity="rare"
+    name="Symbol Rally",
+    description="Symbols mult +1 permanently after scoring 6+ same_symbol patterns in one deadline",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_SYMBOLS_MULT,
+            amount=1,
+            chance=100,
+            condition=SameSymbolCount(6, time_requirement="deadline")
+        )
+    ],
+    rarity="rare"
 )
 
 PatternRally = Charm(
-"Pattern Rally",
-"Patterns mult +1 permanently after scoring 8+ patterns across two spins",
-kind="patterns_mult",
-rarity="rare"
+    name="Pattern Rally",
+    description="Patterns mult +1 permanently after scoring 8+ patterns across two spins",
+    effects=[
+        Effect(
+            type=EffectType.INCREASE_PATTERNS_MULT,
+            amount=1,
+            chance=100,
+            condition=NumPatternScored(8, 0, 2)
+        )
+    ],
+    rarity="rare"
 )
 
 EarningsRally = Charm(

@@ -2,6 +2,8 @@
 # SCORE ENGINE
 # ============================================================
 
+import time
+
 class ScoreEngine:
     """
     Calculates scores for matched patterns on the board.
@@ -37,6 +39,7 @@ class ScoreEngine:
         total_score = 0
 
         for pattern, cells in matches:
+            board.clear_highlights()
 
             score = self.score_pattern(
                 pattern,
@@ -46,6 +49,9 @@ class ScoreEngine:
             )
 
             total_score += score
+            board.print_board()
+            time.sleep(0.125)
+            board.clear_highlights()
 
         return total_score
 
@@ -130,10 +136,6 @@ class ScoreEngine:
         # --------------------------------
         # DISPLAY
         # --------------------------------
-
-        print(
-            f"{pattern.name} -> {total}"
-        )
 
         board.add_highlight(cells)
 

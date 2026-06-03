@@ -24,18 +24,18 @@ class Board:
         self.fill_board(symbol_classes, weights)
         self.highlighted_cells = set()  # Clear highlights for new spin
 
+    def print_board(self):
         print("\n=== BOARD ===")
         for x, row in enumerate(self.grid):
             line = []
             for y, s in enumerate(row):
-                mult_str = s.get_mult_display() if s else "None"
-                mult_str = f"{mult_str:^8}"
-                
-                # Color red if highlighted
+                symbol_str = s.display_name if s else "None"
+                symbol_str = f"{symbol_str:^14}"
+
                 if (x, y) in self.highlighted_cells:
-                    mult_str = f"\033[91m{mult_str}\033[0m"
-                
-                line.append(mult_str)
+                    symbol_str = f"\033[91m{symbol_str}\033[0m"
+
+                line.append(symbol_str)
             print(" | ".join(line))
 
     # ============================================================
@@ -63,3 +63,7 @@ class Board:
     def add_highlight(self, cells):
         """Add cells to the highlight set."""
         self.highlighted_cells.update(cells)
+
+    def clear_highlights(self):
+        """Clear any highlighted cells."""
+        self.highlighted_cells.clear()
