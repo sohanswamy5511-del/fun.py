@@ -80,6 +80,7 @@ def show_store(store_inventory, game_state, owned_charms):
         purchased = store_inventory.pop(idx - 1)
         game_state["balance"] -= 5
         game_state["charms_bought_this_deadline"] += 1
+        game_state["last_bought_charm"] = purchased.name
         owned_charms.append(build_charm_entry(purchased))
         print(f"Bought {purchased.name} for $5.")
 

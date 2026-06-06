@@ -61,9 +61,8 @@ class Trigger(Enum):
     ON_ACTIVATION = auto() # When the charm is activated (cooldown)
     ON_PATTERN_MATCH = auto()
     ON_PATTERN_FAIL = auto()
-    WHEN_BOUGHT = auto()
+    WHEN_BOUGHT = auto() #when charm is bought (permanent basically)
     ON_THROWN_AWAY = auto()
-    PERMANENT = auto() # For effects that are always active while the charm is held
     ON_ROUND_END = auto()
 
 @dataclass
@@ -75,4 +74,12 @@ class Effect:
     chance: float | None = None
     trigger: Trigger | None = None
     condition: Condition | None = None
-    calculate_fn: Any = None  # For dynamic calculations (e.g., NotGreedy's skipped charms)
+    calculate_fn: Any = None 
+
+# Duration
+class Duration(Enum):
+    
+    PERMANENT = auto() # Lasts indefinitely while the charm is held
+    SPINS = auto() # Lasts for a certain number of spins
+    ROUNDS = auto() # Lasts for a certain number of rounds
+    DEADLINES = auto() # Lasts for a certain amount of real time (not implemented yet

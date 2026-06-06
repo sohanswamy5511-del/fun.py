@@ -91,22 +91,6 @@ class EarningsThreshold(Condition):
         threshold = deadline_amount * self.multiplier
         return earnings >= threshold
 
-
-class PatternTypeScored(Condition):
-    """
-    Checks if a specific pattern count was scored this spin.
-    
-    Used by: Ramen (5 patterns), etc.
-    """
-
-    def __init__(self, count):
-        self.count = count
-
-    def check(self, game_state):
-        patterns_scored_this_spin = game_state.get('patterns_scored_this_spin', 0)
-        return patterns_scored_this_spin >= self.count
-
-
 class SymbolTypeScored(Condition):
     """
     Checks if patterns containing only a specific symbol type were scored.
@@ -120,22 +104,6 @@ class SymbolTypeScored(Condition):
     def check(self, game_state):
         last_pattern_symbols = game_state.get('last_pattern_symbols', [])
         return all(sym.name == self.symbol_type.name for sym in last_pattern_symbols)
-
-
-class JackpotScored(Condition):
-    """
-    Checks if jackpot patterns were scored this spin.
-    
-    Used by: SymbolFrenzy (5 jackpots), etc.
-    """
-
-    def __init__(self, count):
-        self.count = count
-
-    def check(self, game_state):
-        jackpots_scored_this_spin = game_state.get('jackpots_scored_this_spin', 0)
-        return jackpots_scored_this_spin >= self.count
-
 
 class UniquePatternCount(Condition):
     """
@@ -195,3 +163,13 @@ class SameSymbolCount(Condition):
     def check(self, game_state):
         symbol_counts = game_state.get('symbol_counts_this_spin', {})
         return any(count >= self.count for count in symbol_counts.values())
+
+class CharmBoughtThisDeadline(Condition):
+    """
+    Checks if a charm was bought this deadline.
+    
+    Used by: PocketRabbit (+1 luck per charm bought this deadline)
+    """
+
+    def check(self, game_state):
+        return game_state.get('charms_bought_this_deadline', 0) > 0

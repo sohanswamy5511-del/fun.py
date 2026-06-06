@@ -2,9 +2,10 @@ from os import name
 import random
 
 from charms import Charm
-from effects import Effect, EffectType, Trigger
+from gamestate import last_bought_charm
+from effects import Effect, EffectType, Trigger, Duration
 from symbol import Coin, Spinner, Wheel, Dice, Card
-from conditions import FirstSpinAfterCharmBought, PatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount
+from conditions import FirstSpinAfterCharmBought, PatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount, CharmBoughtThisDeadline
 from pattern import Pattern, VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SpoonA, SpoonB, NPatternA, NPatternB, XPattern, Jackpot
 # ============================================================
 # CHARM DEFINITIONS - COMMON TIER (50% spawn rate base) (30% with upgrade)
@@ -20,7 +21,8 @@ Tomato = Charm(
             type=EffectType.LUCK,
             amount=3,
             chance=17.5,
-            trigger=Trigger.ON_SPIN_START
+            trigger=Trigger.ON_SPIN_START,
+            duration=Duration.SPINS(1)
         )
     ],
     rarity="common"
@@ -34,7 +36,8 @@ Peach = Charm(
             type=EffectType.LUCK,
             amount=5,
             chance=10,
-            trigger=Trigger.ON_SPIN_START
+            trigger=Trigger.ON_SPIN_START,
+            duration=Duration.SPINS(1)
         )
     ],
     rarity="common"
@@ -50,7 +53,8 @@ GoldenWheels = Charm(
             amount=25,
             chance=25,
             target=Wheel,
-            trigger=Trigger.PERMANENT
+            trigger=Trigger.WHEN_BOUGHT,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="common"
@@ -65,7 +69,8 @@ GoldenDice = Charm(
             amount=20,
             chance=20,
             target=Dice,
-            trigger=Trigger.PERMANENT
+            trigger=Trigger.WHEN_BOUGHT,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="common"
@@ -80,7 +85,8 @@ GoldenCoins = Charm(
             amount=25,
             chance=25,
             target=Coin,
-            trigger=Trigger.PERMANENT
+            trigger=Trigger.WHEN_BOUGHT,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="common"
@@ -95,7 +101,8 @@ GoldenSpinners = Charm(
             amount=30,
             chance=30,
             target=Spinner,
-            trigger=Trigger.PERMANENT
+            trigger=Trigger.WHEN_BOUGHT,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="common"
@@ -226,13 +233,13 @@ JadeRabbit = Charm(
             EffectType.LUCK,
             amount=4,
             chance=16,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_SPIN_START
         ),
         Effect(
             EffectType.SPINS_LEFT,
             amount=1,
             chance=100,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -246,7 +253,8 @@ Cornerstone = Charm(
             EffectType.LUCK,
             amount=7,
             chance=100,
-            condition=FirstSpinAfterCharmBought()
+            condition=FirstSpinAfterCharmBought(),
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -254,12 +262,13 @@ Cornerstone = Charm(
 
 NotGreedy = Charm(
     name="Not Greedy",
-    description="5% base chance for any symbol to spawn with GOLD modifier. Raises by 3% for every round skipped this deadline",
+    description="5% base chance for any symbol to spawn with GOLD modifier. Raises by 3% for every round skipped this deadline (up to 35%)",
     effects=[
         Effect(
             type=EffectType.DYNAMIC_GOLD_CHANCE,
             amount=5,
-            calculate_fn=lambda gs: 5 + (gs.get('rounds_skipped_this_deadline', 0) * 3)
+            calculate_fn=lambda gs: 5 + (gs.get('rounds_skipped_this_deadline', 0) * 3),
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="common"
@@ -273,7 +282,8 @@ LuckyStar = Charm(
             EffectType.LUCK,
             amount=5,
             chance=100,
-            condition=PatternScored(1, 3, None, None)
+            condition=PatternScored(1, 3, None, None, None),
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -281,18 +291,21 @@ LuckyStar = Charm(
 
 Wishbone = Charm(
     name="Wishbone",
-    description="+2 luck next spin; if no patterns appear, gain +5 luck on the following spin",
+    description="+2 luck next spin after 2 failed spins; gain +5 luck on followup for every spin after without a pattern",
     effects=[
         Effect(
             EffectType.LUCK,
             amount=2,
-            chance=100
+            chance=100,
+            condition=PatternScored(0, 2, None, None, None),
+            trigger=Trigger.ON_SPIN_START
         ),
         Effect(
             EffectType.LUCK,
-            amount=5,
+            amount=2 + (5 * (lambda gs: gs.get('consecutive_scoreless_spins', 0) - 2)),
             chance=100,
-            condition=PatternScored(0, 1, None, None)
+            condition=PatternScored(0, 1, None, None, None),
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -306,7 +319,8 @@ Sunflower = Charm(
             type=EffectType.GUARANTEE_PATTERN,
             target=HorizontalLineXL,
             chance=100,
-            condition=PatternScored(0, 2, None, None)
+            condition=PatternScored(0, 2, None, None, None),
+            trigger=Trigger.PRE_SCORE
         )
     ],
     rarity="common"
@@ -320,7 +334,8 @@ CatWink = Charm(
             type=EffectType.GUARANTEE_PATTERN,
             target=VerticalLine,
             chance=100,
-            condition=PatternScored(0, 1, None, None)
+            condition=PatternScored(0, 1, None, None, None),
+            trigger=Trigger.PRE_SCORE
         )
     ],
     rarity="common"
@@ -333,7 +348,8 @@ Smile = Charm(
         Effect(
             type=EffectType.LUCK,
             amount=3,
-            chance=100
+            chance=100,
+            trigger=Trigger.ON_ACTIVATION
         )
     ],
     rarity="common",
@@ -348,7 +364,7 @@ FourLeaf = Charm(
             type=EffectType.LUCK,
             amount=9,
             chance=5,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -361,7 +377,8 @@ OneMoreSpin = Charm(
         Effect(
             type=EffectType.MAX_SPINS,
             amount=1,
-            chance=100
+            chance=100,
+            trigger=Trigger.ON_ACTIVATION
         )
     ],
     rarity="common",
@@ -374,9 +391,10 @@ PocketRabbit = Charm(
     effects=[
         Effect(
             type=EffectType.LUCK,
-            amount=1,
+            amount=1 + (lambda gs: gs.get('charms_bought_this_deadline', 0)),
             chance=100,
-            trigger=Trigger.ON_SPIN_END,
+            trigger=Trigger.ON_SPIN_START,
+            condition=CharmBoughtThisDeadline(),
             calculate_fn=lambda gs: gs.get('charms_bought_this_deadline', 0)
         )
     ],
@@ -391,7 +409,8 @@ BrokenMirror = Charm(
             type=EffectType.LUCK,
             amount=4,
             chance=100,
-            condition=PatternScored(0, 1, None, None)
+            condition=PatternScored(0, 1, None, None, None),
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -409,7 +428,8 @@ Spare_Change = Charm(
         Effect(
             type=EffectType.MAX_SPINS,
             amount=2,
-            chance=100
+            chance=100,
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="uncommon"
@@ -425,7 +445,7 @@ Struck_Gold = Charm(
             target=Coin,
             amount=2,
             chance=100,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_ACTIVATION
         )
     ],
     rarity="uncommon",
@@ -441,7 +461,7 @@ Trick_Deck = Charm(
             target=Card,
             amount=2,
             chance=100,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_ACTIVATION
         )
     ],
     rarity="uncommon",
@@ -457,7 +477,7 @@ ILoveTops = Charm(
             target=Spinner,
             amount=2,
             chance=100,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_ACTIVATION
         )
     ],
     rarity="uncommon",
@@ -473,7 +493,7 @@ Dice_Hard = Charm(
             target=Dice,
             amount=2,
             chance=100,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_ACTIVATION
         )
     ],
     rarity="uncommon",
@@ -489,7 +509,7 @@ WheelOfFortune = Charm(
             target=Wheel,
             amount=2,
             chance=100,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_ACTIVATION
         )
     ],
     rarity="uncommon",
@@ -531,7 +551,8 @@ CharmPocket = Charm(
         Effect(
             type=EffectType.ADD_CHARM_SPACE,
             amount=1,
-            chance=100
+            chance=100,
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="uncommon"
@@ -544,7 +565,8 @@ CharmHouse = Charm(
         Effect(
             type=EffectType.ADD_CHARM_SPACE,
             amount=2,
-            chance=100
+            chance=100,
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="uncommon"
@@ -552,12 +574,12 @@ CharmHouse = Charm(
 
 Blueprint = Charm(
     name="Blueprint",
-    description="Gain the same effect as the last bought charm",
+    description="Gain the same effect as the last bought charm (while equipped)",
     effects=[
         Effect(
             type=EffectType.COPY_LAST_NON_BLUEPRINT_CHARM,
             chance=100,
-            trigger=Trigger.WHEN_BOUGHT
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="uncommon"
