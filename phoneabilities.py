@@ -1,4 +1,5 @@
 # Phone system
+import random
 PHONE_UPGRADE_LEVEL = 0
 CURRENT_PHONE_ABILITY = None
 

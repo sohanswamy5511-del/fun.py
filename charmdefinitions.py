@@ -4,7 +4,7 @@ import random
 from charms import Charm
 from effects import Effect, EffectType, Trigger
 from symbol import Coin, Spinner, Wheel, Dice, Card
-from conditions import FirstSpinAfterCharmBought, NoLargePatternSpins, NoPatternSpins, NumPatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount
+from conditions import FirstSpinAfterCharmBought, PatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, JackpotScored, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount
 from pattern import Pattern, VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SpoonA, SpoonB, NPatternA, NPatternB, XPattern, Jackpot
 # ============================================================
 # CHARM DEFINITIONS - COMMON TIER (50% spawn rate base) (30% with upgrade)
@@ -20,7 +20,7 @@ Tomato = Charm(
             type=EffectType.LUCK,
             amount=3,
             chance=17.5,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -34,7 +34,7 @@ Peach = Charm(
             type=EffectType.LUCK,
             amount=5,
             chance=10,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -50,7 +50,7 @@ GoldenWheels = Charm(
             amount=25,
             chance=25,
             target=Wheel,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="common"
@@ -65,7 +65,7 @@ GoldenDice = Charm(
             amount=20,
             chance=20,
             target=Dice,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="common"
@@ -80,7 +80,7 @@ GoldenCoins = Charm(
             amount=25,
             chance=25,
             target=Coin,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="common"
@@ -95,7 +95,7 @@ GoldenSpinners = Charm(
             amount=30,
             chance=30,
             target=Spinner,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="common"
@@ -110,7 +110,7 @@ GoldenCards = Charm(
             amount=25,
             chance=25,
             target=Card,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.PERMANENT
         )
     ],
     rarity="common"
@@ -124,13 +124,13 @@ Altered_Coin = Charm(
             type=EffectType.LUCK,
             amount=3,
             chance=100,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_ACTIVATION
         ),
         Effect(
             type=EffectType.SPINS_LEFT,
             amount=1,
             chance=100,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_ACTIVATION        
         )
     ],
     rarity="common",
@@ -138,81 +138,51 @@ Altered_Coin = Charm(
 )
 
 Spoons = Charm(
-
     name="Spoons",
-
     description=(
-        "Whenever you see 3 spins "
-        "with no patterns of 4+ symbols, "
-        "the next spin will have "
+        "Whenever you see 3 spins with no patterns of 5+ symbols, the next spin will have "
         "one of the spoon patterns"
     ),
-
     effects=[
-
         Effect(
-
             type=EffectType.GUARANTEE_PATTERN,
-
             target=random.choice([SpoonA, SpoonB]),
-
-            trigger=Trigger.ON_SPIN,
-
-            condition=NoLargePatternSpins(3)
+            trigger=Trigger.PRE_SCORE,
+            condition=PatternScored(0, 3, None, 5, None)
         )
     ],
-
     rarity="common"
 )
 
 X = Charm(
-
     name="X",
-
     description=(
-        "Whenever you don’t see a pattern "
-        "for 5 spins, "
-        "the next spin will have an x pattern"
+        "Whenever you don’t see a pattern for 5 spins, "
+        "the next spin will have an X pattern"
     ),
-
     effects=[
-
         Effect(
-
             type=EffectType.GUARANTEE_PATTERN,
-
             target=XPattern,
-
-            trigger=Trigger.ON_SPIN,
-
-            condition=NoPatternSpins(5)
+            trigger=Trigger.PRE_SCORE,
+            condition=PatternScored(0, 5, None, None, None)
         )
     ],
-
     rarity="common"
 )
 
 N = Charm(
-
     name="N",
-
     description=(
-        "Whenever you don’t see a pattern "
-        "for 4 spins, "
+        "Whenever you don’t see a pattern for 4 spins, "
         "the next spin will have an N pattern"
     ),
-
     effects=[
-
         Effect(
-
             type=EffectType.GUARANTEE_PATTERN,
-
             target=random.choice([NPatternA, NPatternB]),
-
-            trigger=Trigger.ON_SPIN_END,
-
-            condition=NoPatternSpins(4)
+            trigger=Trigger.PRE_SCORE,
+            condition=PatternScored(0, 4, None, None, None)
         )
     ],
 
@@ -227,7 +197,7 @@ LuckyPenny = Charm(
             EffectType.LUCK,
             amount=5,
             chance=12,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_SPIN_START
         )
     ],
     rarity="common"
@@ -241,7 +211,8 @@ FortuneCookie = Charm(
             EffectType.LUCK,
             amount=3,
             chance=10,
-            trigger=Trigger.ON_SPIN_END
+            trigger=Trigger.ON_SPIN_START,
+            duration=2
         )
     ],
     rarity="common"
@@ -302,7 +273,7 @@ LuckyStar = Charm(
             EffectType.LUCK,
             amount=5,
             chance=100,
-            condition=NumPatternScored(3, 1)
+            condition=PatternScored(1, 3, None, None)
         )
     ],
     rarity="common"
@@ -321,7 +292,7 @@ Wishbone = Charm(
             EffectType.LUCK,
             amount=5,
             chance=100,
-            condition=NoPatternSpins(1)
+            condition=PatternScored(0, 1, None, None)
         )
     ],
     rarity="common"
@@ -335,7 +306,7 @@ Sunflower = Charm(
             type=EffectType.GUARANTEE_PATTERN,
             target=HorizontalLineXL,
             chance=100,
-            condition=NoPatternSpins(2)
+            condition=PatternScored(0, 2, None, None)
         )
     ],
     rarity="common"
@@ -349,7 +320,7 @@ CatWink = Charm(
             type=EffectType.GUARANTEE_PATTERN,
             target=VerticalLine,
             chance=100,
-            condition=NoPatternSpins(1)
+            condition=PatternScored(0, 1, None, None)
         )
     ],
     rarity="common"
@@ -420,7 +391,7 @@ BrokenMirror = Charm(
             type=EffectType.LUCK,
             amount=4,
             chance=100,
-            condition=NoPatternSpins(1)
+            condition=PatternScored(0, 1, None, None)
         )
     ],
     rarity="common"
@@ -744,7 +715,7 @@ Ramen = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(1, 5)
+            condition=PatternScored(5, 1, None, None)
         )
     ],
     rarity="rare"
@@ -840,7 +811,7 @@ PatternPulse = Charm(
         Effect(
             type=EffectType.RETRIGGER_PATTERN,
             chance=70,
-            condition=NumPatternScored(10)
+            condition=PatternScored(10, 1, None, None)
         )
     ],
     rarity="rare"
@@ -853,7 +824,7 @@ BigScore = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(8)
+            condition=PatternScored(8, 1, None, None)
         )
     ],
     rarity="rare"
@@ -880,7 +851,7 @@ name="Pattern Surge",
             type=EffectType.INCREASE_PATTERNS_MULT,
             amount=2,
             chance=100,
-            condition=NumPatternScored(10)
+            condition=PatternScored(10, 1, None, None)
         )
     ],
     rarity="rare"
@@ -921,7 +892,7 @@ PatternWave = Charm(
             type=EffectType.INCREASE_PATTERNS_MULT,
             amount=2,
             chance=100,
-            condition=NumPatternScored(7)
+            condition=PatternScored(7, 1, None, None)
         )
     ],
     rarity="rare"
@@ -975,7 +946,7 @@ DoubleCoinValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(2) if all(symbol == Coin for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None) if all(symbol == Coin for symbol in Pattern.symbols) else None
         )
     ],
     rarity="rare"
@@ -988,7 +959,7 @@ DoubleDiceValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(2) if all(symbol == Dice for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None) if all(symbol == Dice for symbol in Pattern.symbols) else None
         )
     ],
     rarity="rare"
@@ -1001,7 +972,7 @@ DoubleSpinnerValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(2) if all(symbol == Spinner for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None) if all(symbol == Spinner for symbol in Pattern.symbols) else None
         )
     ],
     rarity="rare"
@@ -1014,7 +985,7 @@ DoubleCardValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(2) if all(symbol == Card for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None) if all(symbol == Card for symbol in Pattern.symbols) else None
         )
     ],
     rarity="rare"
@@ -1027,7 +998,7 @@ DoubleWheelValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(2) if all(symbol == Wheel for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None) if all(symbol == Wheel for symbol in Pattern.symbols) else None
         )
     ],
     rarity="rare"
@@ -1040,7 +1011,7 @@ DoubleAllPatterns = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=NumPatternScored(7)
+            condition=PatternScored(7, 1, None, None)
         )
     ],
     rarity="rare"
@@ -1053,7 +1024,7 @@ EarningsWave = Charm(
         Effect(
             type=EffectType.INCREASE_EARNINGS_MULT,
             chance=100,
-            condition=NumPatternScored(18)
+            condition=PatternScored(18, 1, None, None)
         )
     ],
     rarity="rare"
@@ -1095,7 +1066,7 @@ EarningsEcho = Charm(
             type=EffectType.INCREASE_EARNINGS_MULT,
             amount=1,
             chance=100,
-            condition=NoPatternSpins(4)
+            condition=PatternScored(0, 4, None, None)
         )
     ],
     rarity="rare"
@@ -1123,7 +1094,7 @@ PatternRally = Charm(
             type=EffectType.INCREASE_PATTERNS_MULT,
             amount=1,
             chance=100,
-            condition=NumPatternScored(8, 0, 2)
+            condition=PatternScored(8, None, 2, None)
         )
     ],
     rarity="rare"

@@ -55,7 +55,10 @@ class EffectType(Enum):
 
 class Trigger(Enum):
 
+    ON_SPIN_START = auto()
+    PRE_SCORE = auto()
     ON_SPIN_END = auto()
+    ON_ACTIVATION = auto() # When the charm is activated (cooldown)
     ON_PATTERN_MATCH = auto()
     ON_PATTERN_FAIL = auto()
     WHEN_BOUGHT = auto()

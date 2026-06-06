@@ -13,61 +13,21 @@ class Condition:
 
 
 # ============================================================
-# PATTERN FAILURE CONDITIONS
+# PATTERN CONDITIONS
 # ============================================================
 
-class NoLargePatternSpins(Condition):
+class PatternScored(Condition):
     """
-    Checks if no large patterns (4+ symbols) have appeared 
-    for N consecutive spins.
-    
-    Used by: Spoons charm
+    Checks if in N consecutive spins or across Z spins at least M patterns were scored in each with minimum A size and maximum B size.
     """
 
-    def __init__(self, spins):
-        self.spins = spins
-
-    def check(self, game_state):
-        return (
-            game_state.get('failed_large_patterns', 0)
-            >= self.spins
-        )
-
-
-class NoPatternSpins(Condition):
-    """
-    Checks if no patterns (any size) have appeared 
-    for N consecutive spins.
-    
-    Used by: X charm (5 spins), N charm (4 spins), 
-             Sunflower (2 spins), CatWink (1 spin)
-    """
-
-    def __init__(self, spins):
-        self.spins = spins
-
-    def check(self, game_state):
-        return (
-            game_state.get('failed_patterns', 0)
-            >= self.spins
-        )
-
-
-# ============================================================
-# PATTERN SUCCESS CONDITIONS
-# ============================================================
-
-class NumPatternScored(Condition):
-    """
-    Checks if in N consecutive spins or across Z spins at least M patterns were scored in each
-    
-    Used by: LuckyStar charm (3 consecutive spins with 1 patterns)
-    """
-
-    def __init__(self, patterns_required, consecutive_spins, across_spins_number):
+    def __init__(self, patterns_required, consecutive_spins, across_spins_number, max_patterns_size, min_patterns_size=0):
         self.patterns_required = patterns_required
-        self.consecutive_spins = consecutive_spins
-        self.across_spins = across_spins_number
+        self.consecutive_spins = consecutive_spins if consecutive_spins is not None else float('inf')
+        self.across_spins = across_spins_number if across_spins_number is not None else float('inf')
+        self.max_patterns_size = max_patterns_size if max_patterns_size is not 15 else float('inf')
+        self.min_patterns_size = min_patterns_size if min_patterns_size is not 0 else float('-inf')
+
 
     def check(self, game_state):
         consecutive_scored = game_state.get(
