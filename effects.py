@@ -82,4 +82,5 @@ class Duration(Enum):
     PERMANENT = auto() # Lasts indefinitely while the charm is held
     SPINS = auto() # Lasts for a certain number of spins
     ROUNDS = auto() # Lasts for a certain number of rounds
-    DEADLINES = auto() # Lasts for a certain amount of real time (not implemented yet
+    DEADLINES = auto() # Lasts for a certain amount of deadlines
+    USES = auto() # Lasts for a certain number of charm uses

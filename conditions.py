@@ -18,7 +18,7 @@ class Condition:
 
 class PatternScored(Condition):
     """
-    Checks if in N consecutive spins or across Z spins at least M patterns were scored in each with minimum A size and maximum B size.
+    Checks if in N consecutive spins or across Z spins at least M patterns were scored in each with max A size and min B size.
     """
 
     def __init__(self, patterns_required, consecutive_spins, across_spins_number, max_patterns_size, min_patterns_size=0):
