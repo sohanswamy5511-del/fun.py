@@ -18,8 +18,8 @@ class EffectType(Enum):
     # Modifiers
     GOLD_MODIFIER = auto()
     WEIGHT_ACTIVE = auto()
-    INCREASE_SYMBOL_MULT = auto()
-    INCREASE_PATTERN_MULT = auto()
+    SYMBOL_MODIFIER = auto()
+    PATTERN_MODIFIER = auto()
     
     # Pattern effects
     ADD_REPETITION = auto()
@@ -41,9 +41,9 @@ class EffectType(Enum):
     COPY_FIRST_SOLD_CHARM = auto()
     
     # Multiplier effects
-    EARNINGS_MULT = auto()
-    SYMBOLS_MULT = auto()
-    PATTERNS_MULT = auto()
+    INCREASE_EARNINGS_MULTIPLIER = auto()
+    INCREASE_SYMBOL_MULTIPLIER = auto()
+    INCREASE_PATTERNS_MULTIPLIER = auto()
     
     # Special triggers
     RETRIGGER_PATTERN = auto()

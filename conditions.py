@@ -66,7 +66,7 @@ class RoundsSkipped(Condition):
 
 class ScorelessRound(Condition):
     """
-    Checks if the current round resulted in no patterns scored.
+    Checks if the current round resulted in no money scored.
     
     Used by: BeefBrisket charm
     """

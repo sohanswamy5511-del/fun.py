@@ -2,7 +2,7 @@ from os import name
 import random
 
 from charms import Charm
-from gamestate import last_bought_charm
+from gamestate import last_bought_charm, game_state
 from effects import Effect, EffectType, Trigger, Duration
 from symbol import Coin, Spinner, Wheel, Dice, Card
 from conditions import FirstSpinAfterCharmBought, PatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount, CharmBoughtThisDeadline
@@ -551,7 +551,7 @@ SymbolBoost = Charm(
     description="Increase a chosen symbol's xmult by +1",
     effects=[
         Effect(
-            type=EffectType.INCREASE_SYMBOL_MULT,
+            type=EffectType.INCREASE_SYMBOL_MULTIPLIER,
             amount=1,
             chance=100,
             trigger=Trigger.WHEN_BOUGHT,
@@ -566,7 +566,7 @@ SymbolSurge = Charm(
     description="Increase a chosen symbol's xmult by +2",
     effects=[
         Effect(
-            type=EffectType.INCREASE_SYMBOL_MULT,
+            type=EffectType.INCREASE_SYMBOL_MULTIPLIER,
             amount=2,
             chance=100,
             trigger=Trigger.WHEN_BOUGHT,
@@ -752,7 +752,7 @@ SymbolBlast = Charm(
     description="Increase a chosen symbol's xmult by +3",
     effects=[
         Effect(
-            type=EffectType.INCREASE_SYMBOL_MULT,
+            type=EffectType.INCREASE_SYMBOL_MULTIPLIER,
             amount=3,
             chance=100,
             trigger=Trigger.WHEN_BOUGHT,
@@ -787,7 +787,8 @@ Ramen = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=PatternScored(5, 1, None, None)
+            condition=PatternScored(5, 1, None, None, None),
+            duration=Duration.DEADLINES(1)
         )
     ],
     rarity="rare"
@@ -795,13 +796,14 @@ Ramen = Charm(
 
 BeefBrisket = Charm(
     name="Beef Brisket",
-    description="Whenever you score no patterns in a round, double all symbol mults, pattern mults, and 1.5 * earnings mult",
+    description="Whenever you score no money in a round, double all symbol mults, pattern mults, and 1.5 * earnings mult",
     effects=[
         Effect(
             type=EffectType.VALUE_BOOST_DROUGHT,
             chance=100,
             condition=ScorelessRound(),
-            trigger=Trigger.ON_ROUND_END
+            trigger=Trigger.ON_ROUND_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -812,9 +814,11 @@ FreeEarnings = Charm(
     description="Earnings mult +1 permanently (doesn't take space)",
     effects=[
         Effect(
-            type=EffectType.EARNINGS_MULT,
+            type=EffectType.INCREASE_EARNINGS_MULTIPLIER,
             amount=1,
-            chance=100
+            chance=100,
+            trigger=Trigger.WHEN_BOUGHT,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -825,9 +829,11 @@ Bell = Charm(
     description="Symbols mult +1 permanently (cooldown 2)",
     effects=[
         Effect(
-            type=EffectType.INCREASE_SYMBOL_MULT,
+            type=EffectType.INCREASE_SYMBOL_MULTIPLIER,
             amount=1,
-            chance=100
+            chance=100,
+            trigger=Trigger.ON_ACTIVATION,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare",
@@ -836,13 +842,15 @@ Bell = Charm(
 
 EverythingInExcess = Charm(
     name="Everything in Excess",
-    description="Patterns mult +1 permanently for every time you earn 1.5x the required deadline's amount",
+    description="Patterns mult +1 permanently for every time you earn 1.5x the required deadline's amount in a spin or round",
     effects=[
         Effect(
-            type=EffectType.INCREASE_PATTERNS_MULT,
+            type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=1,
             chance=100,
-            condition=EarningsThreshold(1.5)
+            condition=EarningsThreshold(1.5),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -855,7 +863,9 @@ NO_CHANGE = Charm(
         Effect(
             type=EffectType.RETRIGGER_PATTERN,
             target=lambda pattern: not all(symbol == Coin for symbol in pattern.symbols),
-            chance=100
+            chance=100,
+            trigger=Trigger.ON_ACTIVATION,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare",
@@ -869,7 +879,9 @@ CoinExtraTrigger = Charm(
         Effect(
             type=EffectType.RETRIGGER_PATTERN(2),
             target=lambda pattern: all(symbol == Coin for symbol in pattern.symbols),
-            chance=100
+            chance=100,
+            trigger=Trigger.ON_ACTIVATION,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare",
@@ -883,7 +895,9 @@ PatternPulse = Charm(
         Effect(
             type=EffectType.RETRIGGER_PATTERN,
             chance=70,
-            condition=PatternScored(10, 1, None, None)
+            condition=PatternScored(10, 1, None, None, None),
+            trigger=Trigger.PRE_SCORE,
+            duration=Duration.SPINS(1)
         )
     ],
     rarity="rare"
@@ -896,7 +910,9 @@ BigScore = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=PatternScored(8, 1, None, None)
+            condition=PatternScored(8, 1, None, None, None),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare"
@@ -904,12 +920,14 @@ BigScore = Charm(
 
 DrySpellBoost = Charm(
     name="Dry Spell",
-    description="Whenever you score no patterns in a round, increase all symbol and pattern values by 200% permanently",
+    description="Whenever you score no patterns or money in a round, increase all symbol and pattern values by 200% permanently",
     effects=[
         Effect(
             type=EffectType.VALUE_BOOST_DROUGHT,
             chance=100,
-            condition=ScorelessRound()
+            condition=ScorelessRound(),
+            trigger=Trigger.ON_ROUND_END,
+            duration=Duration.PERMANENT
         )
     ],
     rarity="rare"
@@ -920,10 +938,12 @@ name="Pattern Surge",
     description="Patterns mult +2 permanently after scoring 10 patterns in a round",
     effects=[
         Effect(
-            type=EffectType.INCREASE_PATTERNS_MULT,
+            type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=2,
             chance=100,
-            condition=PatternScored(10, 1, None, None)
+            condition=PatternScored(10, 1, None, None, None),
+            trigger=Trigger.ON_ROUND_END if PatternScored < 10 and game_state.SPINS_LEFT == 1 else Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -947,7 +967,7 @@ SymbolFrenzy = Charm(
     description="Symbols mult +2 permanently after scoring 5 jackpots in a round",
     effects=[
         Effect(
-            type=EffectType.INCREASE_SYMBOLS_MULT,
+            type=EffectType.INCREASE_SYMBOLS_MULTIPLIER,
             amount=2,
             chance=100,
             condition=JackpotScored(5)
@@ -961,7 +981,7 @@ PatternWave = Charm(
     description="Patterns mult +2 permanently after scoring 7 patterns in one spin",
     effects=[
         Effect(
-            type=EffectType.INCREASE_PATTERNS_MULT,
+            type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=2,
             chance=100,
             condition=PatternScored(7, 1, None, None)
@@ -975,7 +995,7 @@ EarningsRush = Charm(
     description="Earnings mult +3 permanently (doesn't take space)",
     effects=[
         Effect(
-            type=EffectType.INCREASE_EARNINGS_MULT,
+            type=EffectType.INCREASE_EARNINGS_MULTIPLIER,
             amount=3,
             chance=100
         )
@@ -988,7 +1008,7 @@ SymbolRitual = Charm(
     description="Symbols mult +3 permanently after scoring 5+ different patterns in one spin",
     effects=[
         Effect(
-            type=EffectType.INCREASE_SYMBOLS_MULT,
+            type=EffectType.INCREASE_SYMBOLS_MULTIPLIER,
             amount=3,
             chance=100,
             condition=UniquePatternCount(5)
@@ -1002,7 +1022,7 @@ PatternChain = Charm(
     description="Patterns mult +1 permanently every time you score 5 patterns after a scoreless spin",
     effects=[
         Effect(
-            type=EffectType.INCREASE_PATTERNS_MULT,
+            type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=1,
             chance=100,
             condition=ScorelessSpinFollowup(5)
@@ -1094,7 +1114,7 @@ EarningsWave = Charm(
     description="Double earnings mult for the rest of the round after scoring 18+ patterns in one spin",
     effects=[
         Effect(
-            type=EffectType.INCREASE_EARNINGS_MULT,
+            type=EffectType.INCREASE_EARNINGS_MULTIPLIER,
             chance=100,
             condition=PatternScored(18, 1, None, None)
         )
@@ -1107,7 +1127,7 @@ SymbolEcho = Charm(
     description="Symbols mult +1 permanently after scoring 3 different symbol patterns in one spin",
     effects=[
         Effect(
-            type=EffectType.INCREASE_SYMBOLS_MULT,
+            type=EffectType.INCREASE_SYMBOLS_MULTIPLIER,
             amount=1,
             chance=100,
             condition=UniqueSymbolCount(3)
@@ -1121,7 +1141,7 @@ name="Pattern Echo",
     description="Patterns mult +1 permanently after scoring 5 different patterns in one spin",
     effects=[
         Effect(
-            type=EffectType.INCREASE_PATTERNS_MULT,
+            type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=1,
             chance=100,
             condition=UniquePatternCount(5)
@@ -1135,7 +1155,7 @@ EarningsEcho = Charm(
     description="Earnings mult +1 permanently after scoring 4 consecutive spins with no patterns",
     effects=[
         Effect(
-            type=EffectType.INCREASE_EARNINGS_MULT,
+            type=EffectType.INCREASE_EARNINGS_MULTIPLIER,
             amount=1,
             chance=100,
             condition=PatternScored(0, 4, None, None)
@@ -1149,7 +1169,7 @@ SymbolRally = Charm(
     description="Symbols mult +1 permanently after scoring 6+ same_symbol patterns in one deadline",
     effects=[
         Effect(
-            type=EffectType.INCREASE_SYMBOLS_MULT,
+            type=EffectType.INCREASE_SYMBOLS_MULTIPLIER,
             amount=1,
             chance=100,
             condition=SameSymbolCount(6, time_requirement="deadline")
@@ -1163,7 +1183,7 @@ PatternRally = Charm(
     description="Patterns mult +1 permanently after scoring 8+ patterns across two spins",
     effects=[
         Effect(
-            type=EffectType.INCREASE_PATTERNS_MULT,
+            type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=1,
             chance=100,
             condition=PatternScored(8, None, 2, None)
