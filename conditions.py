@@ -138,13 +138,14 @@ class ScorelessSpinFollowup(Condition):
 
 class UniqueSymbolCount(Condition):
     """
-    Checks if patterns containing N unique symbol types were scored.
+    Checks if patterns containing N unique symbol types were scored in P spins.
     
     Used by: SymbolEcho (3+ different symbols in scored patterns)
     """
 
-    def __init__(self, count):
+    def __init__(self, count, spins):
         self.count = count
+        self.spins = spins
 
     def check(self, game_state):
         unique_symbols = game_state.get('unique_symbols_this_spin', set())

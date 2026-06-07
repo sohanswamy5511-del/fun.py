@@ -1045,7 +1045,7 @@ PatternChain = Charm(
 
 DoubleCoinValues = Charm(
     name="Double Coin Values",
-    description="Double all Coin values for the rest of the round after scoring 2 Coin patterns",
+    description="Double all Coin values for the rest of the round after scoring 2+ Coin patterns in a spin",
     effects=[
         Effect(
             type=EffectType.VALUE_DOUBLING,
@@ -1060,7 +1060,7 @@ DoubleCoinValues = Charm(
 
 DoubleDiceValues = Charm(
     name="Double Dice Values",
-    description="Double all Dice values for the rest of the round after scoring 2 Dice patterns",
+    description="Double all Dice values for the rest of the round after scoring 2+ Dice patterns in a spin",
     effects=[
         Effect(
             type=EffectType.VALUE_DOUBLING,
@@ -1075,7 +1075,7 @@ DoubleDiceValues = Charm(
 
 DoubleSpinnerValues = Charm(
     name="Double Spinner Values",
-    description="Double all Spinner values for the rest of the round after scoring 2 Spinner patterns",
+    description="Double all Spinner values for the rest of the round after scoring 2+ Spinner patterns in a spin",
     effects=[
         Effect(
             type=EffectType.VALUE_DOUBLING,
@@ -1090,7 +1090,7 @@ DoubleSpinnerValues = Charm(
 
 DoubleCardValues = Charm(
     name="Double Card Values",
-    description="Double all Card values for the rest of the round after scoring 2 Card patterns",
+    description="Double all Card values for the rest of the round after scoring 2+ Card patterns in a spin",
     effects=[
         Effect(
             type=EffectType.VALUE_DOUBLING,
@@ -1105,12 +1105,14 @@ DoubleCardValues = Charm(
 
 DoubleWheelValues = Charm(
     name="Double Wheel Values",
-    description="Double all Wheel values for the rest of the round after scoring 2 Wheel patterns",
+    description="Double all Wheel values for the rest of the round after scoring 2+ Wheel patterns in a spin",
     effects=[
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=PatternScored(2, 1, None, None) if all(symbol == Wheel for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None) if all(symbol == Wheel for symbol in Pattern.symbols) else None,
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare"
@@ -1123,7 +1125,9 @@ DoubleAllPatterns = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=PatternScored(7, 1, None, None)
+            condition=PatternScored(7, 1, None, None, None),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare"
@@ -1136,7 +1140,9 @@ EarningsWave = Charm(
         Effect(
             type=EffectType.INCREASE_EARNINGS_MULTIPLIER,
             chance=100,
-            condition=PatternScored(18, 1, None, None)
+            condition=PatternScored(18, 1, None, None, None),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare"
@@ -1150,7 +1156,9 @@ SymbolEcho = Charm(
             type=EffectType.INCREASE_SYMBOLS_MULTIPLIER,
             amount=1,
             chance=100,
-            condition=UniqueSymbolCount(3)
+            condition=UniqueSymbolCount(3, 1),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -1164,7 +1172,7 @@ name="Pattern Echo",
             type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=1,
             chance=100,
-            condition=UniquePatternCount(5)
+            condition=UniquePatternCount(5, 1)
         )
     ],
     rarity="rare"
