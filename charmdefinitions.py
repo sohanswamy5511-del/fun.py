@@ -117,7 +117,8 @@ GoldenCards = Charm(
             amount=25,
             chance=25,
             target=Card,
-            trigger=Trigger.PERMANENT
+            trigger=Trigger.PERMANENT,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="common"
