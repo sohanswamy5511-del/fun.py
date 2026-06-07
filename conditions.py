@@ -107,13 +107,14 @@ class SymbolTypeScored(Condition):
 
 class UniquePatternCount(Condition):
     """
-    Checks if N unique pattern types were scored in one spin.
+    Checks if N unique pattern types were scored in X spins.
     
     Used by: SymbolRitual (5+ different patterns)
     """
 
-    def __init__(self, count):
+    def __init__(self, count, spins):
         self.count = count
+        self.spins = spins
 
     def check(self, game_state):
         unique_patterns = game_state.get('unique_patterns_this_spin', set())
@@ -156,9 +157,8 @@ class SameSymbolCount(Condition):
     Used by: SymbolRally (6+ of the same symbol in scored patterns)
     """
 
-    def __init__(self, count, time_requirement=None):
+    def __init__(self, count):
         self.count = count
-        self.time_requirement = time_requirement
 
     def check(self, game_state):
         symbol_counts = game_state.get('symbol_counts_this_spin', {})

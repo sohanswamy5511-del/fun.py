@@ -941,8 +941,8 @@ name="Pattern Surge",
             type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=2,
             chance=100,
-            condition=PatternScored(10, 1, None, None, None),
-            trigger=Trigger.ON_ROUND_END if PatternScored < 10 and game_state.SPINS_LEFT == 1 else Trigger.ON_SPIN_END,
+            condition=PatternScored(10, None, None, None, None),
+            trigger=Trigger.ON_ROUND_END if PatternScored >= 10 and game_state.SPINS_LEFT == 0 else Trigger.ON_SPIN_END,
             duration=Duration.PERMANENT()
         )
     ],
@@ -951,12 +951,14 @@ name="Pattern Surge",
 
 LuckyCoinMath = Charm(
     name="Lucky Coin Math",
-    description="30% chance to trigger patterns one more time when a pattern contains a Coin",
+    description="30% chance to trigger all patterns one more  time if a coin pattern appears",
     effects=[
         Effect(
             type=EffectType.RETRIGGER_PATTERN,
             chance=30,
-            condition=lambda pattern: any(symbol == Coin for symbol in pattern.symbols)
+            condition=lambda pattern: any(symbol == Coin for symbol in pattern.symbols),
+            trigger=Trigger.PRE_SCORE,
+            duration=Duration.SPINS(1)
         )
     ],
     rarity="rare"
@@ -970,7 +972,9 @@ SymbolFrenzy = Charm(
             type=EffectType.INCREASE_SYMBOLS_MULTIPLIER,
             amount=2,
             chance=100,
-            condition=JackpotScored(5)
+            condition=PatternScored(5, None, None, None, 15),
+            trigger=Trigger.ON_ROUND_END if PatternScored >= 10 and game_state.SPINS_LEFT == 0 else Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -984,7 +988,9 @@ PatternWave = Charm(
             type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=2,
             chance=100,
-            condition=PatternScored(7, 1, None, None)
+            condition=PatternScored(7, 1, None, None, None),
+            trigger=Trigger.ON_SPIN_END(),
+            duration=Duration.PERMANENT()        
         )
     ],
     rarity="rare"
@@ -997,7 +1003,9 @@ EarningsRush = Charm(
         Effect(
             type=EffectType.INCREASE_EARNINGS_MULTIPLIER,
             amount=3,
-            chance=100
+            chance=100,
+            trigger=Trigger.WHEN_BOUGHT,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -1011,7 +1019,9 @@ SymbolRitual = Charm(
             type=EffectType.INCREASE_SYMBOLS_MULTIPLIER,
             amount=3,
             chance=100,
-            condition=UniquePatternCount(5)
+            condition=UniquePatternCount(5, 1),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -1025,7 +1035,9 @@ PatternChain = Charm(
             type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=1,
             chance=100,
-            condition=ScorelessSpinFollowup(5)
+            condition=ScorelessSpinFollowup(5),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -1038,7 +1050,9 @@ DoubleCoinValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=PatternScored(2, 1, None, None) if all(symbol == Coin for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None, None) if all(symbol == Coin for symbol in Pattern.symbols) else None,
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare"
@@ -1051,7 +1065,9 @@ DoubleDiceValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=PatternScored(2, 1, None, None) if all(symbol == Dice for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None, None) if all(symbol == Dice for symbol in Pattern.symbols) else None,
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare"
@@ -1064,7 +1080,9 @@ DoubleSpinnerValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=PatternScored(2, 1, None, None) if all(symbol == Spinner for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None, None) if all(symbol == Spinner for symbol in Pattern.symbols) else None,
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare"
@@ -1077,7 +1095,9 @@ DoubleCardValues = Charm(
         Effect(
             type=EffectType.VALUE_DOUBLING,
             chance=100,
-            condition=PatternScored(2, 1, None, None) if all(symbol == Card for symbol in Pattern.symbols) else None
+            condition=PatternScored(2, 1, None, None, None) if all(symbol == Card for symbol in Pattern.symbols) else None,
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.ROUNDS(1)
         )
     ],
     rarity="rare"
@@ -1172,7 +1192,9 @@ SymbolRally = Charm(
             type=EffectType.INCREASE_SYMBOLS_MULTIPLIER,
             amount=1,
             chance=100,
-            condition=SameSymbolCount(6, time_requirement="deadline")
+            condition=SameSymbolCount(6),
+            trigger=Trigger.ON_ROUND_END if SameSymbolCount >= 6 and game_state.SPINS_LEFT == 0 else Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
