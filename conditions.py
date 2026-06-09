@@ -174,3 +174,11 @@ class CharmBoughtThisDeadline(Condition):
 
     def check(self, game_state):
         return game_state.get('charms_bought_this_deadline', 0) > 0
+
+class SamePatternScored(Condition):
+    def __init__ (self, pattern_number, consecutive_spins):
+        self.pattern_number = pattern_number
+        self.consecutive_spins = consecutive_spins
+    
+    def check(self, game_state):
+        return game_state.get('patterns_scored_this_round, 0') > 0

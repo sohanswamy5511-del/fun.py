@@ -5,7 +5,7 @@ from charms import Charm
 from gamestate import last_bought_charm, game_state
 from effects import Effect, EffectType, Trigger, Duration
 from symbol import Coin, Spinner, Wheel, Dice, Card
-from conditions import FirstSpinAfterCharmBought, PatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount, CharmBoughtThisDeadline
+from conditions import FirstSpinAfterCharmBought, PatternScored, SameSymbolCount, ScorelessRound, EarningsThreshold, UniquePatternCount, ScorelessSpinFollowup, UniqueSymbolCount, CharmBoughtThisDeadline, SamePatternScored
 from pattern import Pattern, VerticalLine, HorizontalLine, DiagonalLine, HorizontalLineLarge, HorizontalLineXL, SpoonA, SpoonB, NPatternA, NPatternB, XPattern, Jackpot
 # ============================================================
 # CHARM DEFINITIONS - COMMON TIER (50% spawn rate base) (30% with upgrade)
@@ -1172,7 +1172,9 @@ name="Pattern Echo",
             type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=1,
             chance=100,
-            condition=UniquePatternCount(5, 1)
+            condition=UniquePatternCount(5, 1),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -1186,7 +1188,9 @@ EarningsEcho = Charm(
             type=EffectType.INCREASE_EARNINGS_MULTIPLIER,
             amount=1,
             chance=100,
-            condition=PatternScored(0, 4, None, None)
+            condition=PatternScored(0, 4, None, None, None),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
@@ -1216,24 +1220,43 @@ PatternRally = Charm(
             type=EffectType.INCREASE_PATTERNS_MULTIPLIER,
             amount=1,
             chance=100,
-            condition=PatternScored(8, None, 2, None)
+            condition=PatternScored(8, None, 2, None, None),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
         )
     ],
     rarity="rare"
 )
 
 EarningsRally = Charm(
-"Earnings Rally",
-"Earnings mult +2 permanently after scoring the same pattern 5 spins in a row",
-kind="earnings_mult",
-rarity="rare"
+    name="Earnings Rally",
+    description="Earnings mult +2 permanently after scoring the same pattern 5 spins in a row",
+    effects= [
+        Effect(
+            type=EffectType.INCREASE_EARNINGS_MULTIPLIER,
+            amount=2,
+            chance=100,
+            condition=SamePatternScored(1, 5),
+            trigger=Trigger.ON_ROUND_END if game_state.SPINS_LEFT == 0 else Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT()
+        )
+    ],
+    rarity="rare"
 )
 
 ValueSpill = Charm(
-"Value Spill",
-"Increase all symbol values by their current value after 10+ pattern triggers in one deadline",
-kind="symbol_value",
-rarity="rare"
+    name="Value Spill",
+    description="Increase all symbol values by their current value for the deadline after 10+ pattern triggers in one deadline",
+    effects=[
+        Effect(
+            type=EffectType.SYMBOL_VALUE_DOUBLE,
+            chance=100,
+            condition=PatternScored(10, None, None, None, None),
+            trigger=Trigger.ON_ROUND_END if game_state.SPINS_LEFT == 0 else Trigger.ON_SPIN_END,
+            duration=Duration.DEADLINES(1)
+        )
+    ],
+    rarity="rare"
 )
 
 PatternReverb = Charm(
