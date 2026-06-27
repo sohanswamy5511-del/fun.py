@@ -86,10 +86,16 @@ class ScoreEngine:
         )
 
         # --------------------------------
-        # PATTERN MULTIPLIER
+        # GLOBAL SYMBOL MULTIPLIER
         # --------------------------------
 
-        score = pattern.get_multiplier(
+        symbol_sum *= game_state.get('symbol_mult', 1)       
+
+        # --------------------------------
+        # PATTERN SCORE
+        # --------------------------------
+
+        pattern_score = pattern.get_multiplier(
             symbol_sum
         )
 
@@ -97,7 +103,13 @@ class ScoreEngine:
         # GLOBAL PATTERN MULT
         # --------------------------------
 
-        score *= game_state.get('patterns_mult', 1)
+        pattern_score *= game_state.get('patterns_mult', 1)
+        
+        # --------------------------------
+        # GLOBAL EARNINGS MULT
+        # --------------------------------
+
+        pattern_score *= game_state.get('earnings_mult', 1)
 
         # --------------------------------
         # CHAIN BONUS

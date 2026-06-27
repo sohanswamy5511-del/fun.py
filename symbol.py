@@ -25,16 +25,9 @@ class Symbol:
         self.modifiers = []
 
     def apply_golden_modifier(self):
-        """
-        Golden modifier effect:
-        For every symbol with the GOLD modifier that is scored in a pattern,
-        the symbol's type gains +base_value permanently (applied next spin).
-        Only one GOLD symbol is needed in a pattern to trigger this for its
-        symbol type; multiple GOLD symbols in the same pattern stack.
-        Retriggers multiply the total amount queued (i.e., multiplied by
-        the number of triggers).
-        """
-        pass
+        for target in gold_targets:
+            if random.randint(1,100) <= target.gold_chance:
+                symbol.is_golden = True
 
     def apply_multiplier(self, mult):
         """

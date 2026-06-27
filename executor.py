@@ -31,8 +31,11 @@ class EffectExecutor:
             EffectType.ADD_CHAIN:
                 self.apply_chain,
 
-            EffectType.ADD_RECHARGE_TARGET:
+            EffectType.ADD_RECHARGE:
                 self.apply_recharge,
+
+            EffectType.GOLD_MODIFIER:
+                self.apply_gold,
         }
 
     # ========================================================
@@ -210,4 +213,19 @@ class EffectExecutor:
 
         print(
             "  ✓ recharge modifier added"
+        )
+    
+    def apply_gold(
+        self,
+        effect,
+        charm_data,
+        game_state
+    ):
+        
+        game_state['gold_targets'].append(
+            effect.target
+        )
+
+        print(
+            " gold modifier added"
         )

@@ -1,7 +1,6 @@
 #============================================================
 #CHARM
 #============================================================
-
 from distro import name
 
 class Charm:
@@ -13,7 +12,7 @@ class Charm:
         effects=None,
         rarity="common",
         cooldown_rounds=0,
-        weight=None
+        weight=None,
     ):
 
         self.name = name
@@ -32,3 +31,21 @@ class Charm:
             f"({self.rarity}) - "
             f"{self.description}"
         )
+
+from enum import Enum, auto
+
+class count_scored:
+    def __init__(self, count_stored):
+        self.count_stored = count_stored
+    def add_count(self):
+        start_count_scored = 0
+        self.count_scored = start_count_scored
+
+
+class reset_count:
+    ON_SPIN_END = auto()
+    ON_ROUND_END = auto()
+    ON_DEADLINE_END = auto()
+
+    def reset():
+        count_stored = 0

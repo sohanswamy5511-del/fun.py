@@ -1,7 +1,7 @@
 from os import name
 import random
 
-from charms import Charm
+from charms import Charm, reset_count
 from gamestate import last_bought_charm, game_state
 from effects import Effect, EffectType, Trigger, Duration
 from symbol import Coin, Spinner, Wheel, Dice, Card
@@ -43,7 +43,6 @@ Peach = Charm(
     rarity="common"
 )
 
-# Golden Charms (existing)
 GoldenWheels = Charm(
     name="Golden Wheels",
     description="25% chance for Wheels to spawn with GOLD modifier",
@@ -1246,10 +1245,10 @@ EarningsRally = Charm(
 
 ValueSpill = Charm(
     name="Value Spill",
-    description="Increase all symbol values by their current value for the deadline after 10+ pattern triggers in one deadline",
+    description="Increase all symbol values by their current value/25 for the deadline after 10+ pattern triggers in one deadline",
     effects=[
         Effect(
-            type=EffectType.SYMBOL_VALUE_DOUBLE,
+            type=EffectType.SYMBOL_VALUE_INCREASE,
             chance=100,
             condition=PatternScored(10, None, None, None, None),
             trigger=Trigger.ON_ROUND_END if game_state.SPINS_LEFT == 0 else Trigger.ON_SPIN_END,
@@ -1260,10 +1259,18 @@ ValueSpill = Charm(
 )
 
 PatternReverb = Charm(
-"Pattern Reverb",
-"Increase all pattern values by their current value, permanently after scoring 10 patterns in a spin without a Jackpot",
-kind="pattern_value",
-rarity="rare"
+    name="Pattern Reverb",
+    description="Double all pattern values, permanently after scoring 10 patterns in a spin without a Jackpot",
+    effects=[
+        Effect(
+            type=EffectType.PATTERN_VALUE_DOUBLE,
+            chance=100,
+            condition=PatternScored(10, 1, None, 14, None),
+            trigger=Trigger.ON_SPIN_END,
+            duration=Duration.PERMANENT
+        )
+    ],
+    rarity="rare"
 )
 
 SymbolCascade = Charm(

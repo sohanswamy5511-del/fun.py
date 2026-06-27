@@ -11,6 +11,8 @@ game_state = {
     'patterns_mult': 1,
 
     # Runtime combat-style effects
+    'gold_targets': {},
+    "gold_counts": {},
     'repetition_targets': {},
     "repetition_counts": {},
     'chain_targets': {},
@@ -25,6 +27,7 @@ game_state = {
     "earning_counts": {},
 
     # percentages
+    "gold_percent": 0,
     "repetition_percent": 0,
     "chain_percent": 0,
     "recharge_percent": 0,
